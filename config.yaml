@@ -1,0 +1,19 @@
+raw_tcp:
+  host: 192.168.86.9
+  port: 9100
+  font: A
+  width: 48
+  cut: true
+  initialize: true
+
+donetick:
+  base_url: "https://donetick.themedina.house"
+  token: "299c9b193b160f735aff0461edb8a8fd6443e9b0280fb319f406743104da1f5b"
+  options: {}
+
+mealie:
+  base_url: "https://recipes.themedina.house"
+  token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb25nX3Rva2VuIjp0cnVlLCJpZCI6IjdmYjY0OWUwLTU5YTItNDZmYi05YTEzLTZiMDc2YzI0NjdmMyIsIm5hbWUiOiJUaGVybWFMaXN0IiwiaW50ZWdyYXRpb25faWQiOiJnZW5lcmljIiwiZXhwIjoxOTM0NTk5ODA1fQ.se_kf_CETOvWFlVDQRIVNvg3h6nCsf57jUPfyDEBsxU"
+  timeout_seconds: 10
+
+timezone: "America/Los_Angeles"

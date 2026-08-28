@@ -1,0 +1,14 @@
+printer:
+  backend: raw_tcp
+  host: 192.168.1.50
+  port: 9100
+  font: A
+  width: 48
+  cut: true
+  initialize: true
+
+source:
+  name: donetick
+  base_url: http://YOUR-DONETICK-HOST:2021
+  token: YOUR_ACCESS_TOKEN
+  options: {}

@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>ThermaList</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="stylesheet" href="/static/style.css" />
+    </head>
+    <body>
+        <div class="app is-home" id="app">
+            <aside id="sidebar" class="sidebar" hidden aria-hidden="true">
+                <div class="brand-header">
+                    <img
+                        src="/static/ThermaList_Logo.png"
+                        alt="ThermaList logo"
+                        class="brand-logo"
+                    />
+                    <h1>ThermaList</h1>
+                    <button id="homeBtn" type="button" class="secondary">
+                        Home
+                    </button>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Content</div>
+
+                    <label>
+                        Type
+                        <select id="module">
+                            <option value="label">Label</option>
+                            <option value="notes">Notes</option>
+                            <option value="todo">Todo</option>
+                            <option value="recipe">Recipe</option>
+                        </select>
+                    </label>
+
+                    <div id="labelForm" style="display: none">
+                        <div class="subsection">
+                            <div class="section-title section-title-compact">
+                                Quick Verbs
+                            </div>
+                            <div class="toggle-chip-row">
+                                <button
+                                    type="button"
+                                    class="verb-chip"
+                                    data-verb="Opened"
+                                >
+                                    Opened
+                                </button>
+                                <button
+                                    type="button"
+                                    class="verb-chip"
+                                    data-verb="Expires"
+                                >
+                                    Expires
+                                </button>
+                                <button
+                                    type="button"
+                                    class="verb-chip"
+                                    data-verb="Made"
+                                >
+                                    Made
+                                </button>
+                                <button
+                                    type="button"
+                                    class="verb-chip"
+                                    data-verb="Due"
+                                >
+                                    Due
+                                </button>
+                            </div>
+                        </div>
+
+                        <label>
+                            Verb
+                            <input
+                                type="text"
+                                id="labelVerb"
+                                placeholder="Opened"
+                                value="Opened"
+                            />
+                        </label>
+
+                        <label>
+                            Date
+                            <input type="date" id="labelDate" />
+                        </label>
+
+                        <label>
+                            Note <span class="hint-inline">(optional)</span>
+                            <input
+                                type="text"
+                                id="labelNote"
+                                placeholder="Salsa Verde Jar"
+                            />
+                        </label>
+                        <label>
+                            Theme
+                            <select id="labelTheme">
+                                <option value="">Loading Themes...</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div id="recipeForm" style="display: none">
+                        <label>
+                            Recipe Source
+                            <select id="recipeSourceMode">
+                                <option value="url">Manual URL</option>
+                                <option value="mealie">Mealie</option>
+                            </select>
+                        </label>
+
+                        <div id="recipeUrlControls">
+                            <div class="subsection">
+                                <div
+                                    class="section-title section-title-compact"
+                                >
+                                    Recipe Import
+                                </div>
+
+                                <label for="recipeSourceUrl">
+                                    Recipe URL
+                                    <input
+                                        id="recipeSourceUrl"
+                                        type="url"
+                                        placeholder="https://example.com/recipe"
+                                        inputmode="url"
+                                        autocomplete="url"
+                                    />
+                                </label>
+
+                                <p class="hint">
+                                    Paste a recipe page link. ThermaList will
+                                    try to extract the title, ingredients,
+                                    steps, and timing. Not all websites will work.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div id="recipeMealieControls" style="display: none">
+                            <div class="subsection">
+                                <div
+                                    class="section-title section-title-compact"
+                                >
+                                    Mealie Recipes
+                                </div>
+
+                                <label>
+                                    Search
+                                    <input
+                                        id="mealieRecipeSearch"
+                                        type="text"
+                                        placeholder="Search recipes"
+                                        autocomplete="off"
+                                    />
+                                </label>
+
+                                <label>
+                                    Recipe
+                                    <select id="mealieRecipeSelect">
+                                        <option value="">
+                                            Select a recipe
+                                        </option>
+                                    </select>
+                                </label>
+
+                                <div class="hint">
+                                    Search and choose a recipe from your Mealie
+                                    library.
+                                </div>
+
+                                <div class="todo-items-header">
+                                    <button
+                                        id="loadMealieRecipesBtn"
+                                        class="secondary"
+                                        type="button"
+                                    >
+                                        Refresh Recipes
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="notesForm">
+                        <label>
+                            Title
+                            <input id="title" type="text" value="Reminder" />
+                        </label>
+
+                        <label>
+                            Body
+                            <textarea id="body">
+Print yourself a helpful ThermaList</textarea
+                            >
+                        </label>
+                    </div>
+
+                    <div id="todoForm" style="display: none">
+                        <label>
+                            Todo Source
+                            <select id="todoSourceMode">
+                                <option value="manual">Manual</option>
+                                <option value="donetick">DoneTick</option>
+                            </select>
+                        </label>
+
+                        <div id="doneTickControls" style="display: none">
+                            <label>
+                                Label Filter
+                                <select id="doneTickLabelSelect">
+                                    <option value="">All Labels</option>
+                                </select>
+                            </label>
+
+                            <div class="hint">
+                                Filter by a label, or leave as “All Labels” to
+                                pull everything.
+                            </div>
+
+                            <div class="todo-items-header">
+                                <button
+                                    id="loadLabelsBtn"
+                                    class="secondary"
+                                    type="button"
+                                >
+                                    Refresh Labels
+                                </button>
+                            </div>
+                        </div>
+
+                        <label>
+                            Date Filter
+                            <select id="doneTickDateFilterSelect">
+                                <option value="all">All</option>
+                                <option value="today">Today</option>
+                                <option value="tomorrow">Tomorrow</option>
+                                <option value="next_7_days">Next 7 Days</option>
+                                <option value="overdue">Overdue</option>
+                            </select>
+                        </label>
+
+                        <label
+                            id="doneTickIncludeOverdueWrap"
+                            class="todo-check"
+                        >
+                            <input
+                                type="checkbox"
+                                id="doneTickIncludeOverdue"
+                            />
+                            Include overdue
+                        </label>
+
+                        <div id="manualTodoControls">
+                            <label>
+                                List Title
+                                <input
+                                    id="todoTitle"
+                                    type="text"
+                                    value="Todo List"
+                                    placeholder="Todo List"
+                                />
+                            </label>
+
+                            <div class="todo-items-header">
+                                <div
+                                    class="section-title section-title-compact"
+                                >
+                                    Tasks
+                                </div>
+                                <button
+                                    id="addTaskBtn"
+                                    class="secondary"
+                                    type="button"
+                                >
+                                    Add Task
+                                </button>
+                            </div>
+
+                            <div id="todoItemsContainer"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="section">
+                    <div class="section-title">Renderer</div>
+
+                    <div class="row">
+                        <label>
+                            Font
+                            <select id="font">
+                                <option value="A">A</option>
+                                <option value="B">B</option>
+                            </select>
+                        </label>
+
+                        <label>
+                            Width
+                            <input
+                                id="width"
+                                type="number"
+                                min="32"
+                                max="64"
+                                value="48"
+                            />
+                        </label>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="content">
+                <section
+                    id="homeScreen"
+                    class="home-screen"
+                    aria-hidden="false"
+                >
+                    <div class="home-shell">
+                        <header class="home-header">
+                            <img
+                                src="/static/ThermaList_Logo.png"
+                                alt="ThermaList"
+                                class="home-logo"
+                            />
+                            <h1>ThermaList</h1>
+                            <p>What would you like to print?</p>
+                        </header>
+
+                        <div class="home-grid">
+                            <button
+                                class="launch-card"
+                                type="button"
+                                data-module="todo"
+                                data-todo-source="donetick"
+                            >
+                                <span class="launch-card__eyebrow"
+                                    >From DoneTick</span
+                                >
+                                <h2>DoneTick Tasks</h2>
+                                <p>Print tasks from your DoneTick instance.</p>
+                            </button>
+
+                            <button
+                                class="launch-card"
+                                type="button"
+                                data-module="todo"
+                                data-todo-source="manual"
+                            >
+                                <span class="launch-card__eyebrow"
+                                    >Checklist</span
+                                >
+                                <h2>Lists</h2>
+                                <p>Print a formatted checklist or task list.</p>
+                            </button>
+
+                            <button
+                                class="launch-card"
+                                type="button"
+                                data-module="notes"
+                            >
+                                <span class="launch-card__eyebrow"
+                                    >Quick note</span
+                                >
+                                <h2>Notes</h2>
+                                <p>Print a simple note with title and body.</p>
+                            </button>
+
+                            <button
+                                class="launch-card"
+                                type="button"
+                                data-module="label"
+                            >
+                                <span class="launch-card__eyebrow"
+                                    >Kitchen</span
+                                >
+                                <h2>Food Labels</h2>
+                                <p>
+                                    Print opened, expires, made, or due labels
+                                    fast.
+                                </p>
+                            </button>
+
+                            <button
+                                class="launch-card"
+                                type="button"
+                                data-module="notes"
+                            >
+                                <span class="launch-card__eyebrow"
+                                    >Freeform</span
+                                >
+                                <h2>Custom Text</h2>
+                                <p>
+                                    Print a quick custom message or
+                                    receipt-style note.
+                                </p>
+                            </button>
+
+                            <button
+                                class="launch-card"
+                                type="button"
+                                data-module="recipe"
+                            >
+                                <span class="launch-card__eyebrow"
+                                    >From link</span
+                                >
+                                <h2>Recipe</h2>
+                                <p>
+                                    Import a recipe from a URL and print a
+                                    compact kitchen-friendly version.
+                                </p>
+                            </button>
+                        </div>
+                    </div>
+                </section>
+
+                <section
+                    id="previewPanel"
+                    class="preview-panel"
+                    hidden
+                    aria-hidden="true"
+                >
+
+                    <div id="errorPanel" class="error-panel" role="alert" aria-atomic="true" hidden>
+                        <div class="error-panel__header">
+                            <div class="error-panel__title">Something went wrong</div>
+                            <button type="button" id="errorDismissBtn" class="error-panel__dismiss" aria-label="Dismiss error">
+                                ×
+                            </button>
+                        </div>
+
+                        <p id="errorMessage" class="error-panel__message">
+                            Preview request failed.
+                        </p>
+
+                        <pre id="errorDetails" class="error-panel__details" hidden></pre>
+                    </div>
+
+                    <div class="preview-wrap">
+                        <div class="paper-shell">
+                            <div class="paper-viewport">
+                                <div class="label-preview-wrap">
+                                    <img id="labelPreviewImage" class="label-preview-image" hidden />
+                                </div>
+
+                                <div class="paper-shadow-wrap">
+                                    <div class="receipt-text-wrap">
+                                        <pre id="preview" class="receipt-paper"></pre>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                        <div
+                            id="optionsSection"
+                            class="section section-options"
+                            hidden
+                        >
+                            <div class="section-title section-title-compact">
+                                Options
+                            </div>
+
+                            <div class="toggle-chip-row" id="renderOptionChips">
+                                <button
+                                    type="button"
+                                    class="toggle-chip is-active"
+                                    data-option="show_labels"
+                                    aria-pressed="true"
+                                >
+                                    Labels
+                                </button>
+                                <button
+                                    type="button"
+                                    class="toggle-chip is-active"
+                                    data-option="show_due"
+                                    aria-pressed="true"
+                                >
+                                    Due
+                                </button>
+                                <button
+                                    type="button"
+                                    class="toggle-chip is-active"
+                                    data-option="show_description"
+                                    aria-pressed="true"
+                                >
+                                    Description
+                                </button>
+                                <button
+                                    type="button"
+                                    class="toggle-chip is-active"
+                                    data-option="show_subtasks"
+                                    aria-pressed="true"
+                                >
+                                    Subtasks
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="preview-toolbar">
+                            <div class="toolbar">
+                                <button id="refreshBtn" type="button">
+                                    Refresh
+                                </button>
+                                <button id="printBtn" type="button">
+                                    Print
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+        </div>
+
+        <script type="module" src="/static/js/app.js"></script>
+    </body>
+</html>
