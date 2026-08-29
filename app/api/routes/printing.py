@@ -75,6 +75,15 @@ def effective_render_config(
     body_render_config: dict[str, Any] | None,
     output_cfg: dict[str, Any],
 ) -> dict[str, Any]:
+    """Build the effective rendering configuration from output settings, request overrides, and application defaults.
+    
+    Parameters:
+        body_render_config (dict[str, Any] | None): Optional rendering settings supplied in the request.
+        output_cfg (dict[str, Any]): Base output configuration.
+    
+    Returns:
+        dict[str, Any]: The merged rendering configuration, including default bitmap font paths and output directory when the application directory is configured.
+    """
     base = dict(output_cfg)
 
     if body_render_config:
@@ -104,6 +113,15 @@ def effective_render_config(
 
 
 def effective_render_options(body: PrintRequest) -> dict[str, Any]:
+    """
+    Build the render options used for a print request.
+    
+    Parameters:
+    	body (PrintRequest): Request containing render options and module-specific overrides.
+    
+    Returns:
+    	dict[str, Any]: Render options with module-specific values applied over the base options.
+    """
     opts = (
         body.render_options.model_dump(exclude_none=True)
         if hasattr(body.render_options, "model_dump")
@@ -116,6 +134,15 @@ def effective_render_options(body: PrintRequest) -> dict[str, Any]:
 
 @router.post("")
 async def send_print_job(request: Request, body: PrintRequest) -> dict[str, Any]:
+    """
+    Submit a print request using the effective source, output, rendering, and option configurations.
+    
+    Parameters:
+        body (PrintRequest): Print job request containing the content, module, and optional configuration overrides.
+    
+    Returns:
+        dict[str, Any]: Result produced by the print pipeline.
+    """
     source_cfg = effective_source_config(request, body.source_name, body.source_config)
     output_cfg = effective_output_config(request, body.output_config)
     render_cfg = effective_render_config(request, body.render_config, output_cfg)
