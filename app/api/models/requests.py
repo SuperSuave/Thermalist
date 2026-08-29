@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 
 class RenderOptions(BaseModel):
+    model_config = ConfigDict(extra="allow")
     mode: str | None = None
     show_labels: bool = True
     show_due: bool = True

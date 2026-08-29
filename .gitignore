@@ -1,0 +1,24 @@
+# Python / Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# Pytest / Cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated files / Runtime
+app/generated_images/*
+!app/generated_images/.gitkeep
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
