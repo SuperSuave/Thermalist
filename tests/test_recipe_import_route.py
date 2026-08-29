@@ -9,7 +9,15 @@ from app.services.recipe_import import RecipeImportError
 pytestmark = pytest.mark.anyio
 
 def test_recipes_route_is_registered():
-    paths = sorted(route.path for route in app.routes)
+    paths = []
+    for route in app.routes:
+        if hasattr(route, "path"):
+            paths.append(route.path)
+        elif hasattr(route, "original_router"):
+            prefix = getattr(getattr(route, "include_context", None), "prefix", "")
+            for r in route.original_router.routes:
+                if hasattr(r, "path"):
+                    paths.append(prefix + r.path)
     assert "/recipes/import" in paths
 
 async def test_recipe_import_route_success(monkeypatch):

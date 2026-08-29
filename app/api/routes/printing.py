@@ -103,11 +103,23 @@ def effective_render_config(
     return base
 
 
+def effective_render_options(body: PrintRequest) -> dict[str, Any]:
+    opts = (
+        body.render_options.model_dump(exclude_none=True)
+        if hasattr(body.render_options, "model_dump")
+        else dict(body.render_options)
+    )
+    if body.module_options:
+        opts.update(body.module_options)
+    return opts
+
+
 @router.post("")
 async def send_print_job(request: Request, body: PrintRequest) -> dict[str, Any]:
     source_cfg = effective_source_config(request, body.source_name, body.source_config)
     output_cfg = effective_output_config(request, body.output_config)
     render_cfg = effective_render_config(request, body.render_config, output_cfg)
+    render_opts = effective_render_options(body)
 
     return await pipeline.send(
         module_name=body.module_name,
@@ -118,7 +130,7 @@ async def send_print_job(request: Request, body: PrintRequest) -> dict[str, Any]
         output_kind=body.output_kind or "raw_tcp",
         output_config=output_cfg,
         render_config=render_cfg,
-        render_options=body.render_options,
+        render_options=render_opts,
         theme_name=body.theme_name,
         timezone=request.app.state.config.timezone,
     )
