@@ -111,7 +111,6 @@ class MealieClient:
         ingredients = self._parse_ingredients(data)
         steps = self._parse_steps(data)
 
-        recipe_id = data.get("id")
         slug = data.get("slug")
         name = data.get("name") or "Untitled Recipe"
         description = data.get("description")
