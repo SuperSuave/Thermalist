@@ -593,7 +593,6 @@ class ThemeLayoutRenderer:
 
             if el.repeat_direction == RepeatDirection.RIGHT:
                 bottom = el.y + row_h
-                right = el.x + (row_h + el.gap) * (span - 1) + (el.width or 0)
                 max_bottom = max(max_bottom, bottom)
             else:
                 bottom = el.y + row_h + (span - 1) * (row_h + el.gap)
