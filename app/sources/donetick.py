@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -138,40 +139,36 @@ class DoneTickSource(Source):
             }
 
         chores = data if isinstance(data, list) else data.get("chores", []) or data.get("items", [])
+        filtered_chores = []
+
+        for chore in chores:
+            raw_labels = chore.get("labelsV2") or chore.get("labels") or []
+            labels = [
+                label.get("name", label) if isinstance(label, dict) else str(label)
+                for label in raw_labels
+            ]
+
+            if label_filter and label_filter not in labels:
+                continue
+
+            due_value = chore.get("nextDueDate") or chore.get("dueDate") or chore.get("due_date")
+            due_dt = self._parse_due(due_value, tz)
+
+            if not self._matches_date_filter(
+                due_dt,
+                now=now,
+                date_filter=date_filter,
+                include_overdue=include_overdue,
+            ):
+                continue
+
+            filtered_chores.append((chore, labels, due_value))
+
         tasks: list[dict[str, Any]] = []
 
         async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
-            for chore in chores:
-                raw_labels = chore.get("labelsV2") or chore.get("labels") or []
-                labels = [
-                    label.get("name", label) if isinstance(label, dict) else str(label)
-                    for label in raw_labels
-                ]
-
-                if label_filter and label_filter not in labels:
-                    continue
-
-                due_value = chore.get("nextDueDate") or chore.get("dueDate") or chore.get("due_date")
-                due_dt = self._parse_due(due_value, tz)
-
-                if not self._matches_date_filter(
-                    due_dt,
-                    now=now,
-                    date_filter=date_filter,
-                    include_overdue=include_overdue,
-                ):
-                    continue
-
-                status = chore.get("status")
-                completed = bool(
-                    chore.get("completed")
-                    or chore.get("isCompleted")
-                    or chore.get("done")
-                    or status == 1
-                )
-
+            async def fetch_detail(chore: dict[str, Any]) -> list[dict[str, Any]]:
                 raw_subtasks = chore.get("subTasks") or chore.get("subtasks") or []
-
                 chore_id = chore.get("id")
                 if chore_id is not None:
                     detail_url = f"{base}/api/v1/chores/{chore_id}/details"
@@ -183,9 +180,24 @@ class DoneTickSource(Source):
                         raw_subtasks = detail_chore.get("subTasks") or raw_subtasks
                     except Exception:
                         pass
+                return raw_subtasks
 
-                subtasks: list[dict[str, Any]] = []
+            subtasks_results = await asyncio.gather(
+                *(fetch_detail(chore) for chore, _, _ in filtered_chores)
+            )
 
+        for (chore, labels, due_value), raw_subtasks in zip(filtered_chores, subtasks_results):
+            status = chore.get("status")
+            completed = bool(
+                chore.get("completed")
+                or chore.get("isCompleted")
+                or chore.get("done")
+                or status == 1
+            )
+
+            subtasks: list[dict[str, Any]] = []
+
+            if isinstance(raw_subtasks, list):
                 for sub in raw_subtasks:
                     sub_labels = sub.get("labels") or []
                     sub_labels = [
@@ -214,18 +226,18 @@ class DoneTickSource(Source):
                         }
                     )
 
-                tasks.append(
-                    {
-                        "id": str(chore.get("id")),
-                        "title": chore.get("name") or chore.get("title") or "Untitled task",
-                        "completed": completed,
-                        "labels": labels,
-                        "due": due_value,
-                        "description": chore.get("description"),
-                        "metadata": chore,
-                        "subtasks": subtasks,
-                    }
-                )
+            tasks.append(
+                {
+                    "id": str(chore.get("id")),
+                    "title": chore.get("name") or chore.get("title") or "Untitled task",
+                    "completed": completed,
+                    "labels": labels,
+                    "due": due_value,
+                    "description": chore.get("description"),
+                    "metadata": chore,
+                    "subtasks": subtasks,
+                }
+            )
 
         limit = kwargs.get("limit")
         if isinstance(limit, int) and limit > 0:
