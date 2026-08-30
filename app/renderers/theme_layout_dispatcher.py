@@ -54,7 +54,6 @@ class ThemeLayoutRenderer:
         probe_draw = ImageDraw.Draw(probe)
 
         left = layout.outer_margin
-        top = layout.outer_margin
         right = width - layout.outer_margin - 1
         inner_left = left + layout.inner_padding + theme.border_width
         inner_right = right - layout.inner_padding - theme.border_width
