@@ -29,7 +29,10 @@ def prepare_for_print(image: Image.Image, threshold: int = 180) -> Image.Image:
 def save_label_preview(
     image: Image.Image, label_name: str, threshold: int = 180
 ) -> dict:
-    output_base = GENERATED_IMAGE_DIR / label_name
+    safe_name = Path(label_name).name
+    if not safe_name or safe_name in (".", ".."):
+        safe_name = "label"
+    output_base = GENERATED_IMAGE_DIR / safe_name
     output_base.parent.mkdir(parents=True, exist_ok=True)
 
     gray_path = output_base.with_suffix(".png")
