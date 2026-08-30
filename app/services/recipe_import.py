@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
+import socket
 from typing import Any
 from urllib.parse import urlparse
 
@@ -55,7 +57,56 @@ async def import_recipe_from_url(url: str) -> RecipeItem:
     )
 
 
+def _validate_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise RecipeImportError("Only HTTP and HTTPS URLs are allowed")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise RecipeImportError("Invalid URL: missing hostname")
+
+    hostname = hostname.strip("[]")
+
+    try:
+        try:
+            ip = ipaddress.ip_address(hostname)
+            _check_ip_allowed(ip)
+            return
+        except ValueError as exc:
+            if "not allowed" in str(exc):
+                raise RecipeImportError(str(exc)) from exc
+
+        addr_info = socket.getaddrinfo(hostname, None)
+        if not addr_info:
+            raise RecipeImportError("Could not resolve URL hostname")
+
+        for family, type_, proto, canonname, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            _check_ip_allowed(ip)
+    except socket.gaierror as exc:
+        raise RecipeImportError(f"Failed to resolve URL hostname: {exc}") from exc
+
+
+def _check_ip_allowed(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> None:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+
+    if (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_unspecified
+        or ip.is_multicast
+    ):
+        raise RecipeImportError(f"Access to private/local IP address ({ip}) is not allowed")
+
+
 async def _fetch_html(url: str) -> str:
+    _validate_url(url)
+
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -70,10 +121,24 @@ async def _fetch_html(url: str) -> str:
     }
 
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=15.0, headers=headers) as client:
-            response = await client.get(url)
-            response.raise_for_status()
-            return response.text
+        async with httpx.AsyncClient(follow_redirects=False, timeout=15.0, headers=headers) as client:
+            current_url = url
+            max_redirects = 5
+
+            for _ in range(max_redirects):
+                response = await client.get(current_url)
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        raise RecipeImportError("Redirect missing Location header")
+                    next_url = str(response.url.join(location))
+                    _validate_url(next_url)
+                    current_url = next_url
+                else:
+                    response.raise_for_status()
+                    return response.text
+
+            raise RecipeImportError("Too many redirects")
     except httpx.HTTPError as exc:
         raise RecipeImportError(f"Failed to fetch recipe URL: {exc}") from exc
 
