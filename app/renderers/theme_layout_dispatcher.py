@@ -65,7 +65,6 @@ class ThemeLayoutRenderer:
         body_font = self.fonts.body(theme.body_font_size)
         sub_font = self.fonts.body(theme.badge_font_size)  # or a subtext size you add
 
-        verb = (payload.title or layout.name).upper()
         date_text = payload.values.get("date_text", "")
 
         # Compute body/subtext lines using your wrap_text helper
