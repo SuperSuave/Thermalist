@@ -60,7 +60,6 @@ class ThemeLayoutRenderer:
         inner_right = right - layout.inner_padding - theme.border_width
         frame_inner_width = inner_right - inner_left
 
-        title_font = self.fonts.title(theme.title_font_size)
         badge_font = self.fonts.body(theme.badge_font_size)
         body_font = self.fonts.body(theme.body_font_size)
         sub_font = self.fonts.body(theme.badge_font_size)  # or a subtext size you add
