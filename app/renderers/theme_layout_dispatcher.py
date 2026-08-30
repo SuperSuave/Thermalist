@@ -93,7 +93,6 @@ class ThemeLayoutRenderer:
         mode = "RGB" if theme.debug_guides else "L"
         bg = (255, 255, 255) if mode == "RGB" else theme.background
         image = Image.new(mode, (width, total_h), color=bg)
-        draw = ImageDraw.Draw(image)
 
         # Draw frame (rounded vs minimal) using theme.corner_radius, theme.border_width
         ...
