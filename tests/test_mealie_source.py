@@ -6,6 +6,7 @@ from app.core.config import MealieConfig
 from app.sources.mealie import (
     MealieSource,
     MealieClient,
+    parse_ingredient_line,
 )
 
 pytestmark = pytest.mark.anyio
@@ -104,3 +105,30 @@ async def test_mealie_source_fetch_error():
         assert res["ok"] is False
         assert res["recipe"] is None
         assert "Network failed" in res["error"]
+
+
+@pytest.mark.parametrize(
+    "line, expected_quantity, expected_unit, expected_item, expected_note",
+    [
+        ("2 cups flour", "2", "cups", "flour", None),
+        ("1/2 tsp salt", "1/2", "tsp", "salt", None),
+        ("1 1/2 cups milk", "11/2", "cups", "milk", None),
+        ("1.5 kg sugar", "1.5", "kg", "sugar", None),
+        ("1-2 cloves garlic", "1-2", "cloves", "garlic", None),
+        ("Salt and black pepper", None, None, "Salt and black pepper", None),
+        ("cloves garlic", None, "cloves", "garlic", None),
+        ("1 cup flour (sifted)", "1", "cup", "flour", "sifted"),
+        ("1 cup flour (sifted) (organic)", "1", "cup", "flour", "sifted; organic"),
+        ("2 tbsp butter for frying", "2", "tbsp", "butter", "for frying"),
+        ("   3   tbsp   olive   oil   ", "3", "tbsp", "olive oil", None),
+        ("2 cups", "2", "cups", "2 cups", None),
+        ("", None, None, "", None),
+        ("   ", None, None, "", None),
+    ],
+)
+def test_parse_ingredient_line(line, expected_quantity, expected_unit, expected_item, expected_note):
+    res = parse_ingredient_line(line)
+    assert res.quantity == expected_quantity
+    assert res.unit == expected_unit
+    assert res.item == expected_item
+    assert res.note == expected_note
