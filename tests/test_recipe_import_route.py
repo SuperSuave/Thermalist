@@ -4,7 +4,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 from app.core.models import RecipeIngredient, RecipeItem, RecipeStep
-from app.services.recipe_import import RecipeImportError
+from app.services.recipe_import import RecipeImportError, _validate_url, import_recipe_from_url
 
 
 pytestmark = pytest.mark.anyio
@@ -120,3 +120,44 @@ async def test_recipe_import_route_returns_400_on_import_error(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "No recipe metadata found at this URL"
+
+
+@pytest.mark.parametrize(
+    "invalid_url",
+    [
+        "http://localhost",
+        "http://localhost:8000",
+        "http://127.0.0.1",
+        "http://127.0.0.1:8080/secret",
+        "http://169.254.169.254/latest/meta-data/",
+        "http://10.0.0.1",
+        "http://172.16.0.1",
+        "http://192.168.1.1",
+        "http://[::1]",
+        "http://[::ffff:127.0.0.1]",
+        "file:///etc/passwd",
+        "ftp://example.com/recipe",
+        "gopher://example.com",
+    ],
+)
+def test_validate_url_blocks_internal_and_non_http_urls(invalid_url):
+    with pytest.raises(RecipeImportError):
+        _validate_url(invalid_url)
+
+
+async def test_recipe_import_blocks_ssrf_and_returns_400():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/recipes/import",
+            json={"url": "http://127.0.0.1:8000/internal-data"},
+        )
+
+    assert response.status_code == 400
+    assert "not allowed" in response.json()["detail"]
+
+
+async def test_import_recipe_from_url_ssrf_rejection():
+    with pytest.raises(RecipeImportError) as exc_info:
+        await import_recipe_from_url("http://169.254.169.254/latest/meta-data/")
+    assert "not allowed" in str(exc_info.value)
