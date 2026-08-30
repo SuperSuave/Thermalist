@@ -556,10 +556,11 @@ class LabelBitmapRenderer:
 
         return image
 
-    def render_notebook(self, data: LabelData) -> Image.Image:
+    def _calculate_notebook_dimensions(
+        self, verb: str
+    ) -> tuple[ImageFont.ImageFont, ImageFont.ImageFont, int, int, int]:
         width = self.theme.paper_width_px
         left = self.theme.outer_margin
-        top = self.theme.outer_margin
         right = width - self.theme.outer_margin - 1
 
         probe = Image.new("L", (width, 2400), color=self.theme.background)
@@ -567,7 +568,7 @@ class LabelBitmapRenderer:
 
         title_font = fit_font_size(
             probe_draw,
-            data.verb.upper(),
+            verb.upper(),
             self.fonts.title_path,
             right - left - 2 * self.theme.inner_padding,
             start=self.theme.title_font_size,
@@ -575,7 +576,7 @@ class LabelBitmapRenderer:
         )
         meta_font = self.fonts.body(20)
 
-        title_bbox = probe_draw.textbbox((0, 0), data.verb.upper(), font=title_font)
+        title_bbox = probe_draw.textbbox((0, 0), verb.upper(), font=title_font)
         title_h = title_bbox[3] - title_bbox[1]
 
         meta_h = 40 if self.theme.meta_header_labels else 0
@@ -593,6 +594,134 @@ class LabelBitmapRenderer:
             + (10 if header_h else 0)
             + list_h
             + self.theme.inner_padding
+        )
+        return title_font, meta_font, title_h, total_h, row_h
+
+    def _draw_notebook_meta_header(
+        self,
+        draw: ImageDraw.ImageDraw,
+        inner_left: int,
+        inner_right: int,
+        body_y: int,
+        meta_font: ImageFont.ImageFont,
+    ) -> int:
+        if not self.theme.meta_header_labels:
+            return body_y
+        mid_x = (inner_left + inner_right) // 2
+        draw.rectangle(
+            [inner_left, body_y, inner_right, body_y + 40],
+            outline=self.theme.foreground,
+            width=1,
+        )
+        draw.line(
+            (mid_x, body_y, mid_x, body_y + 40), fill=self.theme.foreground, width=1
+        )
+        draw.text(
+            (inner_left + 10, body_y + 6),
+            self.theme.meta_header_labels[0],
+            fill=self.theme.foreground,
+            font=meta_font,
+        )
+        draw.text(
+            (mid_x + 10, body_y + 6),
+            self.theme.meta_header_labels[1],
+            fill=self.theme.foreground,
+            font=meta_font,
+        )
+        return body_y + 48
+
+    def _draw_notebook_list_header(
+        self,
+        draw: ImageDraw.ImageDraw,
+        inner_left: int,
+        inner_right: int,
+        body_y: int,
+        meta_font: ImageFont.ImageFont,
+    ) -> int:
+        if not self.theme.list_has_checkbox:
+            return body_y
+        draw.text(
+            (inner_left + 28, body_y),
+            "ITEM",
+            fill=self.theme.foreground,
+            font=meta_font,
+        )
+        draw.line(
+            (inner_left, body_y + 24, inner_right, body_y + 24),
+            fill=self.theme.foreground,
+            width=1,
+        )
+        return body_y + 34
+
+    def _draw_notebook_rows(
+        self,
+        draw: ImageDraw.ImageDraw,
+        inner_left: int,
+        inner_right: int,
+        body_y: int,
+        row_h: int,
+    ) -> None:
+        for i in range(self.theme.list_rows or 12):
+            line_y = body_y + i * row_h
+            draw.line(
+                (inner_left, line_y, inner_right, line_y),
+                fill=self.theme.foreground,
+                width=1,
+            )
+            if self.theme.list_has_checkbox:
+                box_top = line_y + 8
+                draw.rectangle(
+                    [inner_left + 6, box_top, inner_left + 20, box_top + 14],
+                    outline=self.theme.foreground,
+                    width=1,
+                )
+
+    def _draw_notebook_debug_guides(
+        self,
+        draw: ImageDraw.ImageDraw,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        inner_left: int,
+        inner_right: int,
+        title_y: int,
+        body_y: int,
+        row_h: int,
+    ) -> None:
+        pad = self.theme.debug_margin_px
+        c = self.theme.debug_color
+
+        self.draw_debug_rect(draw, (left, top, right, bottom), color=c)
+        self.draw_debug_hline(draw, left, title_y, right, color=c, pad=pad)
+
+        if self.theme.meta_header_labels:
+            self.draw_debug_rect(
+                draw, (inner_left, body_y, inner_right, body_y + 40), color=c
+            )
+            self.draw_debug_hline(
+                draw, inner_left, body_y + 40, inner_right, color=c, pad=pad
+            )
+
+        if self.theme.list_has_checkbox:
+            self.draw_debug_hline(
+                draw, inner_left, body_y + 24, inner_right, color=c, pad=pad
+            )
+
+        for i in range(self.theme.list_rows or 12):
+            line_y = body_y + i * row_h
+            self.draw_debug_hline(
+                draw, inner_left, line_y, inner_right, color=c, pad=pad
+            )
+
+    def render_notebook(self, data: LabelData) -> Image.Image:
+        width = self.theme.paper_width_px
+        left = self.theme.outer_margin
+        top = self.theme.outer_margin
+        right = width - self.theme.outer_margin - 1
+
+        title_font, meta_font, title_h, total_h, row_h = (
+            self._calculate_notebook_dimensions(data.verb)
         )
 
         mode = "RGB" if self.theme.debug_guides else "L"
@@ -619,84 +748,26 @@ class LabelBitmapRenderer:
         )
 
         body_y = content_y + title_h + 12 + self.theme.body_start_offset_y
-
-        if self.theme.meta_header_labels:
-            mid_x = (inner_left + inner_right) // 2
-            draw.rectangle(
-                [inner_left, body_y, inner_right, body_y + 40],
-                outline=self.theme.foreground,
-                width=1,
-            )
-            draw.line(
-                (mid_x, body_y, mid_x, body_y + 40), fill=self.theme.foreground, width=1
-            )
-            draw.text(
-                (inner_left + 10, body_y + 6),
-                self.theme.meta_header_labels[0],
-                fill=self.theme.foreground,
-                font=meta_font,
-            )
-            draw.text(
-                (mid_x + 10, body_y + 6),
-                self.theme.meta_header_labels[1],
-                fill=self.theme.foreground,
-                font=meta_font,
-            )
-            body_y += 48
-
-        if self.theme.list_has_checkbox:
-            draw.text(
-                (inner_left + 28, body_y),
-                "ITEM",
-                fill=self.theme.foreground,
-                font=meta_font,
-            )
-            draw.line(
-                (inner_left, body_y + 24, inner_right, body_y + 24),
-                fill=self.theme.foreground,
-                width=1,
-            )
-            body_y += 34
-
-        for i in range(self.theme.list_rows or 12):
-            line_y = body_y + i * row_h
-            draw.line(
-                (inner_left, line_y, inner_right, line_y),
-                fill=self.theme.foreground,
-                width=1,
-            )
-            if self.theme.list_has_checkbox:
-                box_top = line_y + 8
-                draw.rectangle(
-                    [inner_left + 6, box_top, inner_left + 20, box_top + 14],
-                    outline=self.theme.foreground,
-                    width=1,
-                )
+        body_y = self._draw_notebook_meta_header(
+            draw, inner_left, inner_right, body_y, meta_font
+        )
+        body_y = self._draw_notebook_list_header(
+            draw, inner_left, inner_right, body_y, meta_font
+        )
+        self._draw_notebook_rows(draw, inner_left, inner_right, body_y, row_h)
 
         if self.theme.debug_guides:
-            pad = self.theme.debug_margin_px
-            c = self.theme.debug_color
-
-            self.draw_debug_rect(draw, (left, top, right, bottom), color=c)
-            self.draw_debug_hline(draw, left, title_y, right, color=c, pad=pad)
-
-            if self.theme.meta_header_labels:
-                self.draw_debug_rect(
-                    draw, (inner_left, body_y, inner_right, body_y + 40), color=c
-                )
-                self.draw_debug_hline(
-                    draw, inner_left, body_y + 40, inner_right, color=c, pad=pad
-                )
-
-            if self.theme.list_has_checkbox:
-                self.draw_debug_hline(
-                    draw, inner_left, body_y + 24, inner_right, color=c, pad=pad
-                )
-
-            for i in range(self.theme.list_rows or 12):
-                line_y = body_y + i * row_h
-                self.draw_debug_hline(
-                    draw, inner_left, line_y, inner_right, color=c, pad=pad
-                )
+            self._draw_notebook_debug_guides(
+                draw,
+                left,
+                top,
+                right,
+                bottom,
+                inner_left,
+                inner_right,
+                title_y,
+                body_y,
+                row_h,
+            )
 
         return image

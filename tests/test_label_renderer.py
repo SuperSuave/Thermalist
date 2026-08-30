@@ -91,3 +91,32 @@ def test_label_render_respects_width():
     for line in receipt.text_preview.splitlines():
         if line:
             assert len(line) <= 32
+
+
+def test_label_bitmap_render_notebook():
+    from PIL import Image
+    from app.renderers.label_bitmap import (
+        FontSet,
+        LabelBitmapRenderer,
+        LabelData,
+        LabelThemeName,
+        get_theme,
+    )
+
+    theme = get_theme(LabelThemeName.REMINDERS_NOTEBOOK)
+    fonts = FontSet()
+    renderer = LabelBitmapRenderer(theme=theme, fonts=fonts)
+    data = LabelData(verb="TODO", date_text="2026-04-17", body="Notebook content")
+
+    img = renderer.render(data)
+    assert isinstance(img, Image.Image)
+    assert img.width == theme.paper_width_px
+    assert img.height > 0
+
+    # Also test with debug_guides=True
+    theme_debug = get_theme(LabelThemeName.REMINDERS_NOTEBOOK)
+    theme_debug.debug_guides = True
+    renderer_debug = LabelBitmapRenderer(theme=theme_debug, fonts=fonts)
+    img_debug = renderer_debug.render(data)
+    assert isinstance(img_debug, Image.Image)
+    assert img_debug.mode == "RGB"
