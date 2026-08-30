@@ -65,10 +65,8 @@ class ThemeLayoutRenderer:
 
         verb = (payload.title or layout.name).upper()
 
-        # Compute body/subtext lines using your wrap_text helper
-        body_text = payload.values.get("body", "")
+        # Compute subtext lines using wrap_text helper
         sub_text = payload.values.get("subtext", "")
-        body_lines = self.wrap_text(body_text, body_font, frame_inner_width, probe_draw)
         sub_lines = self.wrap_text(sub_text, sub_font, frame_inner_width, probe_draw)
 
         # Compute badge width, body height, subtext height — porting logic from render_standard
