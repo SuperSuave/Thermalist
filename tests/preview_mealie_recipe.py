@@ -7,7 +7,10 @@ from app.sources.mealie import (
 )
 
 
-def main() -> None:
+import asyncio
+
+
+async def main() -> None:
     source_config = MealieSourceConfig(
         base_url="https://demo.mealie.io",
         token="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJsb25nX3Rva2VuIjp0cnVlLCJpZCI6ImM3OTM2YWE4LWJhNzctNDRmNC1hNTVkLTlmZDU4NTM2MGI3MCIsIm5hbWUiOiJ0ZXN0MiIsImludGVncmF0aW9uX2lkIjoiZ2VuZXJpYyIsImV4cCI6MTkzNDA3ODc4OH0.TH3u0Ky-LEPDThg_6yP0gN8yfQ1qY2nQn6MLIWXkltE",
@@ -23,7 +26,7 @@ def main() -> None:
         order_direction="asc",
     )
 
-    recipe = fetch_mealie_recipe(source_config, source_options)
+    recipe = await fetch_mealie_recipe(source_config, source_options)
     document = build_recipe_document(
         recipe,
         variant="full-recipe",
@@ -40,4 +43,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

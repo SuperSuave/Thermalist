@@ -25,7 +25,7 @@ class MealieSource(Source):
             )
         )
         try:
-            results = client.search_recipes(per_page=1, page=1)
+            results = await client.search_recipes(per_page=1, page=1)
             return {
                 "ok": True,
                 "source": self.name,
@@ -38,7 +38,7 @@ class MealieSource(Source):
                 "error": str(exc),
             }
         finally:
-            client.close()
+            await client.aclose()
 
     async def fetch(self, **kwargs: Any) -> dict[str, Any]:
         try:
@@ -52,7 +52,7 @@ class MealieSource(Source):
                 order_direction=kwargs.get("order_direction", "asc"),
             )
 
-            recipe = fetch_mealie_recipe(
+            recipe = await fetch_mealie_recipe(
                 MealieSourceConfig(
                     base_url=self.config.base_url,
                     token=self.config.token,
@@ -175,7 +175,7 @@ class MealieSourceOptions(BaseModel):
 class MealieClient:
     def __init__(self, config: MealieSourceConfig) -> None:
         self.config = config
-        self._client = httpx.Client(
+        self._client = httpx.AsyncClient(
             base_url=config.base_url.rstrip("/"),
             timeout=config.timeout_seconds,
             headers={
@@ -184,15 +184,18 @@ class MealieClient:
             },
         )
 
-    def close(self) -> None:
-        self._client.close()
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
-    def get_recipe_by_id(self, recipe_id: str) -> dict[str, Any]:
-        response = self._client.get(f"/api/recipes/{recipe_id}")
+    async def close(self) -> None:
+        await self._client.aclose()
+
+    async def get_recipe_by_id(self, recipe_id: str) -> dict[str, Any]:
+        response = await self._client.get(f"/api/recipes/{recipe_id}")
         response.raise_for_status()
         return response.json()
 
-    def search_recipes(
+    async def search_recipes(
         self,
         *,
         slug: str | None = None,
@@ -214,7 +217,7 @@ class MealieClient:
         if order_by:
             params["orderBy"] = order_by
 
-        response = self._client.get("/api/recipes", params=params)
+        response = await self._client.get("/api/recipes", params=params)
         response.raise_for_status()
         payload = response.json()
         return payload.get("data", [])
@@ -313,17 +316,17 @@ def map_mealie_recipe(raw: dict[str, Any]) -> RecipeItem:
     )
 
 
-def fetch_mealie_recipe(
+async def fetch_mealie_recipe(
     source_config: MealieSourceConfig,
     source_options: MealieSourceOptions,
 ) -> RecipeItem:
     client = MealieClient(source_config)
     try:
         if source_options.recipe_id:
-            raw = client.get_recipe_by_id(source_options.recipe_id)
+            raw = await client.get_recipe_by_id(source_options.recipe_id)
             return map_mealie_recipe(raw)
 
-        results = client.search_recipes(
+        results = await client.search_recipes(
             slug=source_options.slug,
             query_filter=source_options.query_filter,
             per_page=source_options.per_page,
@@ -337,4 +340,4 @@ def fetch_mealie_recipe(
 
         return map_mealie_recipe(results[0])
     finally:
-        client.close()
+        await client.aclose()
