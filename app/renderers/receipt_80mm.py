@@ -163,122 +163,148 @@ class Receipt80mmRenderer(Renderer):
 
         return b"".join(parts)
 
-    def render(self, document: Document) -> RenderedReceipt:
+    def _render_title_section(self, section) -> list[str]:
         lines: list[str] = []
-        label_raw: bytes | None = None
+        if section.text:
+            title = _strip_unsupported_chars(section.text.strip().upper())
+            today = datetime.now().strftime("%m/%d/%y")
+
+            lines.append(self._center(f"{title}"))
+            lines.append(self._center(today))
+            lines.append(self._divider("^v"))
+            lines.append("")
+        return lines
+
+    def _render_text_section(self, section) -> list[str]:
+        if section.text:
+            text = _strip_unsupported_chars(section.text)
+            return self._wrap(text)
+        return []
+
+    def _render_label_section(self, section) -> tuple[list[str], bytes]:
+        lines: list[str] = []
+        verb = _strip_unsupported_chars(section.text or "")
+        date = _strip_unsupported_chars(section.metadata.get("date", ""))
+        note = _strip_unsupported_chars(section.metadata.get("note", ""))
+
+        inner = self.width - 2
+        border = "+" + "-" * inner + "+"
+        blank = "|" + " " * inner + "|"
+
+        lines.append(border)
+        lines.append(blank)
+
+        if verb:
+            lines.append(self._box_line(verb, inner))
+
+        if date:
+            lines.append(self._box_line(date, inner))
+
+        if verb or date:
+            lines.append(blank)
+
+        if note:
+            wrapped_note = textwrap.wrap(note, width=inner - 2) or [""]
+
+            if len(wrapped_note) == 1:
+                lines.append(self._box_line(wrapped_note[0], inner))
+            else:
+                for part in wrapped_note:
+                    lines.append("| " + part.ljust(inner - 2) + " |")
+
+            lines.append(blank)
+
+        lines.append(border)
+
+        label_raw = self._build_label_bytes(verb, date, note)
+        return lines, label_raw
+
+    def _render_task_list_section(self, section) -> list[str]:
+        lines: list[str] = []
         task_indent = "    "
         subtask_indent = "        "
 
+        for item in section.tasks:
+            title = _strip_unsupported_chars(item.title or "")
+            prefix = "[x] " if item.completed else "[ ] "
+            lines.extend(self._wrap_task(prefix, title, continuation_indent=task_indent))
+
+            if item.description:
+                desc = _strip_unsupported_chars(item.description)
+                lines.extend(self._wrap(desc, indent=task_indent))
+
+            for sub in getattr(item, "subtasks", []) or []:
+                sub_title = _strip_unsupported_chars(sub.title or "")
+                sub_prefix = "    [x] " if sub.completed else "    [ ] "
+                lines.extend(
+                    self._wrap_task(
+                        sub_prefix,
+                        sub_title,
+                        continuation_indent=subtask_indent,
+                    )
+                )
+
+                if sub.description:
+                    sub_desc = _strip_unsupported_chars(sub.description)
+                    lines.extend(self._wrap(sub_desc, indent=subtask_indent))
+
+                if self.show_due and sub.due:
+                    sub_due_text = _strip_unsupported_chars(f"Due: {sub.due}")
+                    lines.extend(self._wrap(sub_due_text, indent=subtask_indent))
+
+            if self.show_due and item.due:
+                due_text = _strip_unsupported_chars(f"Due: {item.due}")
+                lines.extend(self._wrap(due_text, indent=task_indent))
+            lines.append("")
+
+        return lines
+
+    def _render_ingredient_list_section(self, section) -> list[str]:
+        lines: list[str] = []
+        for ingredient in section.ingredients:
+            display = (
+                ingredient.text
+                or ingredient.original_text
+                or ""
+            )
+            text = _strip_unsupported_chars(display)
+            lines.extend(self._wrap_list_item("- ", text, continuation_indent="   "))
+        lines.append("")
+        return lines
+
+    def _render_step_list_section(self, section) -> list[str]:
+        lines: list[str] = []
+        for step in section.steps:
+            text = _strip_unsupported_chars(step.text or "")
+            prefix = f"{step.number}. "
+            lines.extend(
+                self._wrap_list_item(prefix, text, continuation_indent="   ")
+            )
+        lines.append("")
+        return lines
+
+    def render(self, document: Document) -> RenderedReceipt:
+        lines: list[str] = []
+        label_raw: bytes | None = None
+
         for section in document.sections:
-            if section.kind == "title" and section.text:
-                title = _strip_unsupported_chars(section.text.strip().upper())
-                today = datetime.now().strftime("%m/%d/%y")
-
-                lines.append(self._center(f"{title}"))
-                lines.append(self._center(today))
-                lines.append(self._divider("^v"))
-                lines.append("")
-
-            elif section.kind == "text" and section.text:
-                text = _strip_unsupported_chars(section.text)
-                lines.extend(self._wrap(text))
-
+            if section.kind == "title":
+                lines.extend(self._render_title_section(section))
+            elif section.kind == "text":
+                lines.extend(self._render_text_section(section))
             elif section.kind == "divider":
                 lines.append(self._divider())
-
             elif section.kind == "spacer":
                 lines.append("")
-
             elif section.kind == "label":
-                verb = _strip_unsupported_chars(section.text or "")
-                date = _strip_unsupported_chars(section.metadata.get("date", ""))
-                note = _strip_unsupported_chars(section.metadata.get("note", ""))
-
-                inner = self.width - 2
-                border = "+" + "-" * inner + "+"
-                blank = "|" + " " * inner + "|"
-
-                lines.append(border)
-                lines.append(blank)
-
-                if verb:
-                    lines.append(self._box_line(verb, inner))
-
-                if date:
-                    lines.append(self._box_line(date, inner))
-
-                if verb or date:
-                    lines.append(blank)
-
-                if note:
-                    wrapped_note = textwrap.wrap(note, width=inner - 2) or [""]
-
-                    if len(wrapped_note) == 1:
-                        lines.append(self._box_line(wrapped_note[0], inner))
-                    else:
-                        for part in wrapped_note:
-                            lines.append("| " + part.ljust(inner - 2) + " |")
-
-                    lines.append(blank)
-
-                lines.append(border)
-
-                label_raw = self._build_label_bytes(verb, date, note)
-
+                sec_lines, label_raw = self._render_label_section(section)
+                lines.extend(sec_lines)
             elif section.kind == "task_list":
-                for item in section.tasks:
-                    title = _strip_unsupported_chars(item.title or "")
-                    prefix = "[x] " if item.completed else "[ ] "
-                    lines.extend(self._wrap_task(prefix, title, continuation_indent=task_indent))
-
-                    if item.description:
-                        desc = _strip_unsupported_chars(item.description)
-                        lines.extend(self._wrap(desc, indent=task_indent))
-
-                    for sub in getattr(item, "subtasks", []) or []:
-                        sub_title = _strip_unsupported_chars(sub.title or "")
-                        sub_prefix = "    [x] " if sub.completed else "    [ ] "
-                        lines.extend(
-                            self._wrap_task(
-                                sub_prefix,
-                                sub_title,
-                                continuation_indent=subtask_indent,
-                            )
-                        )
-
-                        if sub.description:
-                            sub_desc = _strip_unsupported_chars(sub.description)
-                            lines.extend(self._wrap(sub_desc, indent=subtask_indent))
-
-                        if self.show_due and sub.due:
-                            sub_due_text = _strip_unsupported_chars(f"Due: {sub.due}")
-                            lines.extend(self._wrap(sub_due_text, indent=subtask_indent))
-
-                    if self.show_due and item.due:
-                        due_text = _strip_unsupported_chars(f"Due: {item.due}")
-                        lines.extend(self._wrap(due_text, indent=task_indent))
-                    lines.append("")
-
+                lines.extend(self._render_task_list_section(section))
             elif section.kind == "ingredient_list":
-                for ingredient in section.ingredients:
-                    display = (
-                        ingredient.text
-                        or ingredient.original_text
-                        or ""
-                    )
-                    text = _strip_unsupported_chars(display)
-                    lines.extend(self._wrap_list_item("- ", text, continuation_indent="   "))
-                lines.append("")
-
+                lines.extend(self._render_ingredient_list_section(section))
             elif section.kind == "step_list":
-                for step in section.steps:
-                    text = _strip_unsupported_chars(step.text or "")
-                    prefix = f"{step.number}. "
-                    lines.extend(
-                        self._wrap_list_item(prefix, text, continuation_indent="   ")
-                    )
-                lines.append("")
-
+                lines.extend(self._render_step_list_section(section))
 
         while lines and lines[-1] == "":
             lines.pop()
