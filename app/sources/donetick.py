@@ -102,26 +102,23 @@ class DoneTickSource(Source):
         except Exception as exc:
             return {"ok": False, "error": str(exc), "url": url}
 
-    async def fetch(self, **kwargs: Any) -> dict[str, Any]:
-        base = self.config.base_url.rstrip("/")
-        list_url = f"{base}/eapi/v1/chore"
-        label_filter = kwargs.get("label_filter") or kwargs.get("label")
-        date_filter = kwargs.get("date_filter", "all")
-        include_overdue = bool(kwargs.get("include_overdue", False))
+    @staticmethod
+    def _extract_labels(raw_labels: Any) -> list[str]:
+        if not isinstance(raw_labels, list):
+            return []
+        return [
+            label.get("name", label) if isinstance(label, dict) else str(label)
+            for label in raw_labels
+        ]
 
-        if date_filter == "overdue":
-            include_overdue = False
-
-        tz = self._resolve_tz()
-        now = datetime.now(tz) if tz is not None else datetime.now()
-
+    async def _fetch_chores_data(self, list_url: str) -> tuple[bool, Any, dict[str, Any] | None]:
         try:
             async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
                 list_resp = await client.get(list_url, headers=self._headers())
                 list_resp.raise_for_status()
-                data = list_resp.json()
+                return True, list_resp.json(), None
         except httpx.HTTPStatusError as exc:
-            return {
+            return False, None, {
                 "ok": False,
                 "tasks": [],
                 "source": self.name,
@@ -130,7 +127,7 @@ class DoneTickSource(Source):
                 "body_preview": exc.response.text[:300],
             }
         except Exception as exc:
-            return {
+            return False, None, {
                 "ok": False,
                 "tasks": [],
                 "source": self.name,
@@ -138,15 +135,20 @@ class DoneTickSource(Source):
                 "error": str(exc),
             }
 
-        chores = data if isinstance(data, list) else data.get("chores", []) or data.get("items", [])
+    def _filter_chores(
+        self,
+        chores: list[dict[str, Any]],
+        *,
+        label_filter: str | None,
+        date_filter: str,
+        include_overdue: bool,
+        tz: ZoneInfo | None,
+        now: datetime,
+    ) -> list[tuple[dict[str, Any], list[str], Any]]:
         filtered_chores = []
-
         for chore in chores:
             raw_labels = chore.get("labelsV2") or chore.get("labels") or []
-            labels = [
-                label.get("name", label) if isinstance(label, dict) else str(label)
-                for label in raw_labels
-            ]
+            labels = self._extract_labels(raw_labels)
 
             if label_filter and label_filter not in labels:
                 continue
@@ -163,9 +165,13 @@ class DoneTickSource(Source):
                 continue
 
             filtered_chores.append((chore, labels, due_value))
+        return filtered_chores
 
-        tasks: list[dict[str, Any]] = []
-
+    async def _fetch_subtasks_for_chores(
+        self,
+        base: str,
+        filtered_chores: list[tuple[dict[str, Any], list[str], Any]],
+    ) -> list[list[dict[str, Any]]]:
         async with httpx.AsyncClient(timeout=self.config.timeout_seconds) as client:
             async def fetch_detail(chore: dict[str, Any]) -> list[dict[str, Any]]:
                 raw_subtasks = chore.get("subTasks") or chore.get("subtasks") or []
@@ -182,62 +188,95 @@ class DoneTickSource(Source):
                         pass
                 return raw_subtasks
 
-            subtasks_results = await asyncio.gather(
-                *(fetch_detail(chore) for chore, _, _ in filtered_chores)
+            return list(
+                await asyncio.gather(
+                    *(fetch_detail(chore) for chore, _, _ in filtered_chores)
+                )
             )
 
-        for (chore, labels, due_value), raw_subtasks in zip(filtered_chores, subtasks_results):
-            status = chore.get("status")
-            completed = bool(
-                chore.get("completed")
-                or chore.get("isCompleted")
-                or chore.get("done")
-                or status == 1
-            )
+    def _format_subtask(self, sub: dict[str, Any]) -> dict[str, Any]:
+        sub_labels = self._extract_labels(sub.get("labels") or [])
+        sub_status = sub.get("status")
+        sub_completed = bool(
+            sub.get("completed")
+            or sub.get("isCompleted")
+            or sub.get("done")
+            or sub.get("completedAt")
+            or sub_status == 1
+        )
+        return {
+            "id": str(sub.get("id")),
+            "title": sub.get("name") or sub.get("title") or "Untitled subtask",
+            "completed": sub_completed,
+            "labels": sub_labels,
+            "due": sub.get("nextDueDate") or sub.get("dueDate") or sub.get("due_date"),
+            "description": sub.get("description"),
+            "metadata": sub,
+        }
 
-            subtasks: list[dict[str, Any]] = []
+    def _format_task(
+        self,
+        chore: dict[str, Any],
+        labels: list[str],
+        due_value: Any,
+        raw_subtasks: Any,
+    ) -> dict[str, Any]:
+        status = chore.get("status")
+        completed = bool(
+            chore.get("completed")
+            or chore.get("isCompleted")
+            or chore.get("done")
+            or status == 1
+        )
 
-            if isinstance(raw_subtasks, list):
-                for sub in raw_subtasks:
-                    sub_labels = sub.get("labels") or []
-                    sub_labels = [
-                        label.get("name", label) if isinstance(label, dict) else str(label)
-                        for label in sub_labels
-                    ]
+        subtasks: list[dict[str, Any]] = []
+        if isinstance(raw_subtasks, list):
+            subtasks = [self._format_subtask(sub) for sub in raw_subtasks]
 
-                    sub_status = sub.get("status")
-                    sub_completed = bool(
-                        sub.get("completed")
-                        or sub.get("isCompleted")
-                        or sub.get("done")
-                        or sub.get("completedAt")
-                        or sub_status == 1
-                    )
+        return {
+            "id": str(chore.get("id")),
+            "title": chore.get("name") or chore.get("title") or "Untitled task",
+            "completed": completed,
+            "labels": labels,
+            "due": due_value,
+            "description": chore.get("description"),
+            "metadata": chore,
+            "subtasks": subtasks,
+        }
 
-                    subtasks.append(
-                        {
-                            "id": str(sub.get("id")),
-                            "title": sub.get("name") or sub.get("title") or "Untitled subtask",
-                            "completed": sub_completed,
-                            "labels": sub_labels,
-                            "due": sub.get("nextDueDate") or sub.get("dueDate") or sub.get("due_date"),
-                            "description": sub.get("description"),
-                            "metadata": sub,
-                        }
-                    )
+    async def fetch(self, **kwargs: Any) -> dict[str, Any]:
+        base = self.config.base_url.rstrip("/")
+        list_url = f"{base}/eapi/v1/chore"
+        label_filter = kwargs.get("label_filter") or kwargs.get("label")
+        date_filter = kwargs.get("date_filter", "all")
+        include_overdue = bool(kwargs.get("include_overdue", False))
 
-            tasks.append(
-                {
-                    "id": str(chore.get("id")),
-                    "title": chore.get("name") or chore.get("title") or "Untitled task",
-                    "completed": completed,
-                    "labels": labels,
-                    "due": due_value,
-                    "description": chore.get("description"),
-                    "metadata": chore,
-                    "subtasks": subtasks,
-                }
-            )
+        if date_filter == "overdue":
+            include_overdue = False
+
+        tz = self._resolve_tz()
+        now = datetime.now(tz) if tz is not None else datetime.now()
+
+        success, data, error_response = await self._fetch_chores_data(list_url)
+        if not success and error_response is not None:
+            return error_response
+
+        chores = data if isinstance(data, list) else data.get("chores", []) or data.get("items", [])
+        filtered_chores = self._filter_chores(
+            chores,
+            label_filter=label_filter,
+            date_filter=date_filter,
+            include_overdue=include_overdue,
+            tz=tz,
+            now=now,
+        )
+
+        subtasks_results = await self._fetch_subtasks_for_chores(base, filtered_chores)
+
+        tasks = [
+            self._format_task(chore, labels, due_value, raw_subtasks)
+            for (chore, labels, due_value), raw_subtasks in zip(filtered_chores, subtasks_results)
+        ]
 
         limit = kwargs.get("limit")
         if isinstance(limit, int) and limit > 0:
