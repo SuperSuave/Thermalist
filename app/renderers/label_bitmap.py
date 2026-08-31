@@ -344,6 +344,33 @@ def multiline_height(
     return bbox[3] - bbox[1]
 
 
+@dataclass
+class _StandardLayout:
+    width: int
+    total_h: int
+    left: int
+    top: int
+    right: int
+    bottom: int
+    inner_left: int
+    inner_right: int
+    header_bottom: int
+    title_font: ImageFont.ImageFont
+    badge_font: ImageFont.ImageFont
+    body_font: ImageFont.ImageFont
+    sub_font: ImageFont.ImageFont
+    body_lines: list[str]
+    sub_lines: list[str]
+    badge_text: str
+    badge_left: int
+    badge_top: int
+    badge_right: int
+    badge_bottom: int
+    cursor_y: int
+    rule_y: int
+    subtext_y: int
+
+
 class LabelBitmapRenderer:
     def __init__(self, theme: LabelTheme, fonts: FontSet):
         self.theme = theme
@@ -385,6 +412,24 @@ class LabelBitmapRenderer:
         return self.render_standard(data)
 
     def render_standard(self, data: LabelData) -> Image.Image:
+        layout = self._calculate_standard_layout(data)
+
+        mode = "RGB" if self.theme.debug_guides else "L"
+        bg = (255, 255, 255) if mode == "RGB" else self.theme.background
+        image = Image.new(mode, (layout.width, layout.total_h), color=bg)
+        draw = ImageDraw.Draw(image)
+
+        self._draw_standard_frame(draw, layout)
+        self._draw_standard_header(draw, data.verb, layout)
+        self._draw_standard_badge(draw, layout)
+        self._draw_standard_content(draw, layout)
+
+        if self.theme.debug_guides:
+            self._draw_standard_debug_guides(draw, layout)
+
+        return image
+
+    def _calculate_standard_layout(self, data: LabelData) -> _StandardLayout:
         width = self.theme.paper_width_px
         probe = Image.new("L", (width, 2400), color=self.theme.background)
         probe_draw = ImageDraw.Draw(probe)
@@ -445,120 +490,200 @@ class LabelBitmapRenderer:
             + self.theme.inner_padding
         )
 
-        mode = "RGB" if self.theme.debug_guides else "L"
-        bg = (255, 255, 255) if mode == "RGB" else self.theme.background
-        image = Image.new(mode, (width, total_h), color=bg)
-        draw = ImageDraw.Draw(image)
-
         bottom = total_h - self.theme.outer_margin - 1
+        header_bottom = top + self.theme.header_height
+        badge_left = inner_left
+        badge_top = header_bottom + self.theme.inner_padding
+        badge_right = badge_left + badge_w
+        badge_bottom = badge_top + badge_h
+
+        cursor_y = (
+            badge_bottom + self.theme.section_gap + self.theme.body_start_offset_y
+        )
+        body_bottom_y = cursor_y + body_h
+        rule_y = body_bottom_y + self.theme.rule_gap_above
+        subtext_y = rule_y + self.theme.rule_gap_below
+
+        return _StandardLayout(
+            width=width,
+            total_h=total_h,
+            left=left,
+            top=top,
+            right=right,
+            bottom=bottom,
+            inner_left=inner_left,
+            inner_right=inner_right,
+            header_bottom=header_bottom,
+            title_font=title_font,
+            badge_font=badge_font,
+            body_font=body_font,
+            sub_font=sub_font,
+            body_lines=body_lines,
+            sub_lines=sub_lines,
+            badge_text=badge_text,
+            badge_left=badge_left,
+            badge_top=badge_top,
+            badge_right=badge_right,
+            badge_bottom=badge_bottom,
+            cursor_y=cursor_y,
+            rule_y=rule_y,
+            subtext_y=subtext_y,
+        )
+
+    def _draw_standard_frame(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
         if self.theme.frame_style != "minimal":
             draw.rounded_rectangle(
-                [left, top, right, bottom],
+                [layout.left, layout.top, layout.right, layout.bottom],
                 radius=self.theme.corner_radius,
                 fill=self.theme.background,
                 outline=self.theme.foreground,
                 width=self.theme.border_width,
             )
         else:
-            draw.line((left, top, right, top), fill=self.theme.foreground, width=2)
             draw.line(
-                (left, bottom, right, bottom), fill=self.theme.foreground, width=2
+                (layout.left, layout.top, layout.right, layout.top),
+                fill=self.theme.foreground,
+                width=2,
+            )
+            draw.line(
+                (layout.left, layout.bottom, layout.right, layout.bottom),
+                fill=self.theme.foreground,
+                width=2,
             )
 
-        header_bottom = top + self.theme.header_height
+    def _draw_standard_header(
+        self, draw: ImageDraw.ImageDraw, verb: str, layout: _StandardLayout
+    ) -> None:
         draw.rounded_rectangle(
-            [left, top, right, header_bottom],
+            [layout.left, layout.top, layout.right, layout.header_bottom],
             radius=self.theme.corner_radius,
             fill=self.theme.foreground,
         )
         draw.rectangle(
-            [left, top + (self.theme.header_height // 2), right, header_bottom],
+            [
+                layout.left,
+                layout.top + (self.theme.header_height // 2),
+                layout.right,
+                layout.header_bottom,
+            ],
             fill=self.theme.foreground,
         )
 
-        header_center_x = (left + right) / 2
-        content_y = top + self.theme.content_shift_y
+        header_center_x = (layout.left + layout.right) / 2
+        content_y = layout.top + self.theme.content_shift_y
         header_center_y = (
-            content_y + (self.theme.header_height / 2) + self.theme.header_text_offset_y
+            content_y
+            + (self.theme.header_height / 2)
+            + self.theme.header_text_offset_y
         )
         draw.text(
             (header_center_x, header_center_y),
-            data.verb.upper(),
+            verb.upper(),
             fill=self.theme.background,
-            font=title_font,
+            font=layout.title_font,
             anchor="mm",
         )
 
-        badge_left = inner_left
-        badge_top = header_bottom + self.theme.inner_padding
-        badge_right = badge_left + badge_w
-        badge_bottom = badge_top + badge_h
+    def _draw_standard_badge(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
         draw.rounded_rectangle(
-            [badge_left, badge_top, badge_right, badge_bottom],
+            [
+                layout.badge_left,
+                layout.badge_top,
+                layout.badge_right,
+                layout.badge_bottom,
+            ],
             radius=self.theme.badge_radius,
             fill=self.theme.background,
             outline=self.theme.foreground,
             width=2,
         )
         draw.text(
-            ((badge_left + badge_right) / 2, (badge_top + badge_bottom) / 2),
-            badge_text,
+            (
+                (layout.badge_left + layout.badge_right) / 2,
+                (layout.badge_top + layout.badge_bottom) / 2,
+            ),
+            layout.badge_text,
             fill=self.theme.foreground,
-            font=badge_font,
+            font=layout.badge_font,
             anchor="mm",
         )
 
-        cursor_y = (
-            badge_bottom + self.theme.section_gap + self.theme.body_start_offset_y
-        )
+    def _draw_standard_content(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
         draw.multiline_text(
-            (inner_left, cursor_y),
-            "\n".join(body_lines),
+            (layout.inner_left, layout.cursor_y),
+            "\n".join(layout.body_lines),
             fill=self.theme.foreground,
-            font=body_font,
+            font=layout.body_font,
             spacing=self.theme.body_spacing,
         )
-        body_bottom_y = cursor_y + body_h
 
-        if sub_lines:
-            rule_y = body_bottom_y + self.theme.rule_gap_above
+        if layout.sub_lines:
             draw.line(
-                (inner_left, rule_y, inner_right, rule_y),
+                (
+                    layout.inner_left,
+                    layout.rule_y,
+                    layout.inner_right,
+                    layout.rule_y,
+                ),
                 fill=self.theme.foreground,
                 width=2,
             )
-            subtext_y = rule_y + self.theme.rule_gap_below
             draw.multiline_text(
-                (inner_left, subtext_y),
-                "\n".join(sub_lines),
+                (layout.inner_left, layout.subtext_y),
+                "\n".join(layout.sub_lines),
                 fill=self.theme.foreground,
-                font=sub_font,
+                font=layout.sub_font,
                 spacing=self.theme.subtext_spacing,
             )
 
-        if self.theme.debug_guides:
-            pad = self.theme.debug_margin_px
-            c = self.theme.debug_color
+    def _draw_standard_debug_guides(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
+        pad = self.theme.debug_margin_px
+        c = self.theme.debug_color
 
-            self.draw_debug_rect(draw, (left, top, right, bottom), color=c)
-            self.draw_debug_hline(draw, left, header_bottom, right, color=c, pad=pad)
-            self.draw_debug_rect(
-                draw, (badge_left, badge_top, badge_right, badge_bottom), color=c
-            )
+        self.draw_debug_rect(
+            draw, (layout.left, layout.top, layout.right, layout.bottom), color=c
+        )
+        self.draw_debug_hline(
+            draw, layout.left, layout.header_bottom, layout.right, color=c, pad=pad
+        )
+        self.draw_debug_rect(
+            draw,
+            (
+                layout.badge_left,
+                layout.badge_top,
+                layout.badge_right,
+                layout.badge_bottom,
+            ),
+            color=c,
+        )
+        self.draw_debug_hline(
+            draw,
+            layout.inner_left,
+            layout.cursor_y,
+            layout.inner_right,
+            color=c,
+            pad=pad,
+        )
+
+        if layout.sub_lines:
             self.draw_debug_hline(
-                draw, inner_left, cursor_y, inner_right, color=c, pad=pad
+                draw,
+                layout.inner_left,
+                layout.rule_y,
+                layout.inner_right,
+                color=c,
+                pad=pad,
             )
 
-            if sub_lines:
-                self.draw_debug_hline(
-                    draw, inner_left, rule_y, inner_right, color=c, pad=pad
-                )
-
-        return image
-
-    def _calculate_notebook_dimensions(
-        self, verb: str
-    ) -> tuple[ImageFont.ImageFont, ImageFont.ImageFont, int, int, int]:
+    def render_notebook(self, data: LabelData) -> Image.Image:
         width = self.theme.paper_width_px
         left = self.theme.outer_margin
         right = width - self.theme.outer_margin - 1
