@@ -54,23 +54,19 @@ class ThemeLayoutRenderer:
         probe_draw = ImageDraw.Draw(probe)
 
         left = layout.outer_margin
-        top = layout.outer_margin
         right = width - layout.outer_margin - 1
         inner_left = left + layout.inner_padding + theme.border_width
         inner_right = right - layout.inner_padding - theme.border_width
         frame_inner_width = inner_right - inner_left
 
         title_font = self.fonts.title(theme.title_font_size)
-        badge_font = self.fonts.body(theme.badge_font_size)
         body_font = self.fonts.body(theme.body_font_size)
         sub_font = self.fonts.body(theme.badge_font_size)  # or a subtext size you add
 
-        date_text = payload.values.get("date_text", "")
+        verb = (payload.title or layout.name).upper()
 
-        # Compute body/subtext lines using your wrap_text helper
-        body_text = payload.values.get("body", "")
+        # Compute subtext lines using wrap_text helper
         sub_text = payload.values.get("subtext", "")
-        body_lines = self.wrap_text(body_text, body_font, frame_inner_width, probe_draw)
         sub_lines = self.wrap_text(sub_text, sub_font, frame_inner_width, probe_draw)
 
         # Compute badge width, body height, subtext height — porting logic from render_standard
@@ -92,7 +88,6 @@ class ThemeLayoutRenderer:
         mode = "RGB" if theme.debug_guides else "L"
         bg = (255, 255, 255) if mode == "RGB" else theme.background
         image = Image.new(mode, (width, total_h), color=bg)
-        draw = ImageDraw.Draw(image)
 
         # Draw frame (rounded vs minimal) using theme.corner_radius, theme.border_width
         ...
@@ -360,6 +355,154 @@ class ThemeLayoutRenderer:
 
         return lines if lines else [""]
 
+    def _draw_empty_list_rows(
+        self,
+        draw,
+        base_x: int,
+        base_y: int,
+        row_h: int,
+        gap: int,
+        available_w: int,
+        row_count: int,
+    ) -> None:
+        for i in range(row_count):
+            row_y = base_y + i * (row_h + gap)
+            draw.line(
+                (base_x, row_y, base_x + available_w, row_y),
+                fill=self.style.foreground,
+                width=1,
+            )
+
+    def _draw_list_column_checkbox(
+        self,
+        draw,
+        layout: LabelLayout,
+        col_x: int,
+        row_y: int,
+        checked: list[bool],
+        check_index: int,
+    ) -> int:
+        box_x = col_x + 4
+        box_y = row_y + 8
+        is_checked = (
+            bool(checked[check_index]) if check_index < len(checked) else False
+        )
+        self.draw_checkbox(
+            draw,
+            CheckBoxElement(
+                x=box_x - layout.outer_margin,
+                y=box_y - layout.outer_margin,
+                width=14,
+                height=14,
+                props={"checked": is_checked},
+            ),
+            layout,
+        )
+        return check_index + 1
+
+    def _draw_list_column_text(
+        self,
+        draw,
+        col_x: int,
+        row_y: int,
+        row_h: int,
+        col_w: int,
+        col_label: str | None,
+        values: list[str],
+        field_index: int,
+        line_gap: int = 2,
+    ) -> int:
+        font = self.fonts.body(self.style.body_font_size)
+        raw_text = (
+            values[field_index]
+            if field_index < len(values)
+            else (col_label or "")
+        )
+        max_text_w = col_w - 12
+        wrapped = self.wrap_text_to_lines(draw, raw_text, font, max_text_w)
+
+        # Measure total text block height
+        total_text_h = 0
+        for line in wrapped:
+            _, _, _, lh = draw.textbbox((0, 0), line, font=font)
+            total_text_h += lh + line_gap
+        total_text_h -= line_gap
+
+        # Center vertically
+        tx = col_x + 8
+        ty = row_y + (row_h - total_text_h) // 2
+
+        for line in wrapped:
+            draw.text(
+                (tx, ty),
+                line,
+                fill=self.style.foreground,
+                font=font,
+            )
+            _, _, _, lh = draw.textbbox((0, 0), line, font=font)
+            ty += lh + line_gap
+
+        return field_index + 1
+
+    def _draw_list_column_badge(
+        self,
+        draw,
+        col_x: int,
+        row_y: int,
+        row_h: int,
+        col_w: int,
+        col_label: str | None,
+        values: list[str],
+        field_index: int,
+        line_gap: int = 2,
+    ) -> int:
+        badge_w = max(30, col_w - 12)
+        badge_h = row_h - 10
+        bx = col_x + 6
+        by = row_y + 5
+        raw_text = (
+            values[field_index]
+            if field_index < len(values)
+            else (col_label or "")
+        )
+
+        draw.rounded_rectangle(
+            [bx, by, bx + badge_w, by + badge_h],
+            radius=6,
+            outline=self.style.foreground,
+            width=1,
+        )
+
+        font = self.fonts.body(self.style.badge_font_size)
+
+        max_badge_text_w = badge_w - 10
+        wrapped = self.wrap_text_to_lines(
+            draw, raw_text, font, max_badge_text_w
+        )
+
+        # Measure total badge text height
+        total_text_h = 0
+        for line in wrapped:
+            _, _, _, lh = draw.textbbox((0, 0), line, font=font)
+            total_text_h += lh + line_gap
+        total_text_h -= line_gap
+
+        # Center vertically in badge
+        text_tx = bx + 5
+        text_ty = by + (badge_h - total_text_h) // 2
+
+        for line in wrapped:
+            draw.text(
+                (text_tx, text_ty),
+                line,
+                fill=self.style.foreground,
+                font=font,
+            )
+            _, _, _, lh = draw.textbbox((0, 0), line, font=font)
+            text_ty += lh + line_gap
+
+        return field_index + 1
+
     def draw_list(
         self, draw, element: ListElement, layout, payload: RenderPayload
     ) -> None:
@@ -369,26 +512,16 @@ class ThemeLayoutRenderer:
         row_count = max(1, element.repeat)
         rows = payload.rows
 
+        available_w = layout.paper_width_px - 2 * layout.outer_margin
+
         if not cols:
-            for i in range(row_count):
-                row_y = base_y + i * (row_h + element.gap)
-                draw.line(
-                    (
-                        base_x,
-                        row_y,
-                        base_x + (layout.paper_width_px - 2 * layout.outer_margin),
-                        row_y,
-                    ),
-                    fill=self.style.foreground,
-                    width=1,
-                )
+            self._draw_empty_list_rows(
+                draw, base_x, base_y, row_h, element.gap, available_w, row_count
+            )
             return
 
         weights = [c.width for c in cols]
-        available_w = layout.paper_width_px - 2 * layout.outer_margin
         widths = self.weighted_widths(available_w, weights)
-
-        line_gap = 2
 
         for row_idx in range(row_count):
             row_y = base_y + row_idx * (row_h + element.gap)
@@ -410,106 +543,17 @@ class ThemeLayoutRenderer:
 
             for col_idx, (col, col_w) in enumerate(zip(cols, widths)):
                 if col.type == "checkbox":
-                    box_x = col_x + 4
-                    box_y = row_y + 8
-                    is_checked = (
-                        bool(checked[check_index])
-                        if check_index < len(checked)
-                        else False
-                    )
-                    check_index += 1
-
-                    self.draw_checkbox(
-                        draw,
-                        CheckBoxElement(
-                            x=box_x - layout.outer_margin,
-                            y=box_y - layout.outer_margin,
-                            width=14,
-                            height=14,
-                            props={"checked": is_checked},
-                        ),
-                        layout,
+                    check_index = self._draw_list_column_checkbox(
+                        draw, layout, col_x, row_y, checked, check_index
                     )
                 elif col.type == "text":
-                    font = self.fonts.body(self.style.body_font_size)
-                    raw_text = (
-                        values[field_index]
-                        if field_index < len(values)
-                        else (col.label or "")
+                    field_index = self._draw_list_column_text(
+                        draw, col_x, row_y, row_h, col_w, col.label, values, field_index
                     )
-                    field_index += 1
-
-                    max_text_w = col_w - 12
-                    wrapped = self.wrap_text_to_lines(draw, raw_text, font, max_text_w)
-
-                    # Measure total text block height
-                    total_text_h = 0
-                    for line in wrapped:
-                        _, _, _, lh = draw.textbbox((0, 0), line, font=font)
-                        total_text_h += lh + line_gap
-                    total_text_h -= line_gap
-
-                    # Center vertically
-                    tx = col_x + 8
-                    ty = row_y + (row_h - total_text_h) // 2
-
-                    for line in wrapped:
-                        draw.text(
-                            (tx, ty),
-                            line,
-                            fill=self.style.foreground,
-                            font=font,
-                        )
-                        _, _, _, lh = draw.textbbox((0, 0), line, font=font)
-                        ty += lh + line_gap
-
                 elif col.type == "badge":
-                    badge_w = max(30, col_w - 12)
-                    badge_h = row_h - 10
-                    bx = col_x + 6
-                    by = row_y + 5
-                    raw_text = (
-                        values[field_index]
-                        if field_index < len(values)
-                        else (col.label or "")
+                    field_index = self._draw_list_column_badge(
+                        draw, col_x, row_y, row_h, col_w, col.label, values, field_index
                     )
-                    field_index += 1
-
-                    draw.rounded_rectangle(
-                        [bx, by, bx + badge_w, by + badge_h],
-                        radius=6,
-                        outline=self.style.foreground,
-                        width=1,
-                    )
-
-                    font = self.fonts.body(self.style.badge_font_size)
-
-                    max_badge_text_w = badge_w - 10
-                    wrapped = self.wrap_text_to_lines(
-                        draw, raw_text, font, max_badge_text_w
-                    )
-
-                    # Measure total badge text height
-                    total_text_h = 0
-                    for line in wrapped:
-                        _, _, _, lh = draw.textbbox((0, 0), line, font=font)
-                        total_text_h += lh + line_gap
-                    total_text_h -= line_gap
-
-                    # Center vertically in badge
-                    text_tx = bx + 5
-                    text_ty = by + (badge_h - total_text_h) // 2
-
-                    for line in wrapped:
-                        draw.text(
-                            (text_tx, text_ty),
-                            line,
-                            fill=self.style.foreground,
-                            font=font,
-                        )
-                        _, _, _, lh = draw.textbbox((0, 0), line, font=font)
-                        text_ty += lh + line_gap
-
                 else:
                     # unknown column type — still advance x
                     pass
@@ -546,7 +590,6 @@ class ThemeLayoutRenderer:
 
             if el.repeat_direction == RepeatDirection.RIGHT:
                 bottom = el.y + row_h
-                right = el.x + (row_h + el.gap) * (span - 1) + (el.width or 0)
                 max_bottom = max(max_bottom, bottom)
             else:
                 bottom = el.y + row_h + (span - 1) * (row_h + el.gap)
