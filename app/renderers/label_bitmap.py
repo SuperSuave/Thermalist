@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 import warnings
 
 from PIL import Image, ImageDraw, ImageFont
@@ -67,177 +67,174 @@ class LabelThemeName(StrEnum):
         return obj
 
 
+BASE_PAPER_WIDTH = 640
+
+THEME_BUILDERS: dict[LabelThemeName, Callable[[], LabelTheme]] = {
+    LabelThemeName.FRAMED_FOOD: lambda: LabelTheme(
+        paper_width_px=BASE_PAPER_WIDTH,
+        outer_margin=22,
+        inner_padding=22,
+        border_width=3,
+        corner_radius=22,
+        header_height=84,
+        badge_height=38,
+        badge_padding_x=18,
+        badge_radius=12,
+        section_gap=14,
+        text_gap=12,
+        rule_gap_above=12,
+        rule_gap_below=10,
+        footer_gap=10,
+        body_spacing=6,
+        subtext_spacing=4,
+        title_font_size=74,
+        badge_font_size=24,
+        body_font_size=36,
+        subtext_font_size=24,
+        header_text_offset_y=-20,
+        body_start_offset_y=15,
+        frame_style="framed",
+    ),
+    LabelThemeName.COMPACT: lambda: LabelTheme(
+        paper_width_px=BASE_PAPER_WIDTH,
+        outer_margin=14,
+        inner_padding=16,
+        border_width=3,
+        corner_radius=16,
+        header_height=70,
+        badge_height=34,
+        badge_padding_x=14,
+        badge_radius=10,
+        section_gap=10,
+        text_gap=8,
+        rule_gap_above=8,
+        rule_gap_below=7,
+        footer_gap=8,
+        body_spacing=4,
+        subtext_spacing=3,
+        title_font_size=64,
+        badge_font_size=22,
+        body_font_size=32,
+        subtext_font_size=21,
+        header_text_offset_y=-16,
+        body_start_offset_y=10,
+        frame_style="compact",
+    ),
+    LabelThemeName.MINIMAL: lambda: LabelTheme(
+        paper_width_px=BASE_PAPER_WIDTH,
+        outer_margin=12,
+        inner_padding=10,
+        border_width=0,
+        corner_radius=0,
+        header_height=48,
+        badge_height=28,
+        badge_padding_x=8,
+        badge_radius=4,
+        section_gap=8,
+        text_gap=8,
+        rule_gap_above=6,
+        rule_gap_below=4,
+        footer_gap=6,
+        body_spacing=4,
+        subtext_spacing=3,
+        title_font_size=42,
+        badge_font_size=18,
+        body_font_size=24,
+        subtext_font_size=16,
+        header_text_offset_y=-20,
+        body_start_offset_y=15,
+        frame_style="minimal",
+    ),
+    LabelThemeName.BOLD: lambda: LabelTheme(
+        paper_width_px=BASE_PAPER_WIDTH,
+        outer_margin=28,
+        inner_padding=28,
+        border_width=6,
+        corner_radius=30,
+        header_height=100,
+        badge_height=48,
+        badge_padding_x=22,
+        badge_radius=16,
+        section_gap=18,
+        text_gap=16,
+        rule_gap_above=14,
+        rule_gap_below=12,
+        footer_gap=14,
+        body_spacing=8,
+        subtext_spacing=6,
+        title_font_size=84,
+        badge_font_size=28,
+        body_font_size=42,
+        subtext_font_size=26,
+        header_text_offset_y=-20,
+        body_start_offset_y=15,
+        frame_style="bold",
+    ),
+    LabelThemeName.PLAYFUL: lambda: LabelTheme(
+        paper_width_px=BASE_PAPER_WIDTH,
+        outer_margin=20,
+        inner_padding=24,
+        border_width=4,
+        corner_radius=36,
+        header_height=88,
+        badge_height=44,
+        badge_padding_x=20,
+        badge_radius=20,
+        section_gap=16,
+        text_gap=14,
+        rule_gap_above=12,
+        rule_gap_below=10,
+        footer_gap=12,
+        body_spacing=7,
+        subtext_spacing=5,
+        title_font_size=66,
+        badge_font_size=26,
+        body_font_size=34,
+        subtext_font_size=22,
+        header_text_offset_y=-20,
+        body_start_offset_y=15,
+        frame_style="playful",
+    ),
+    LabelThemeName.REMINDERS_NOTEBOOK: lambda: LabelTheme(
+        paper_width_px=BASE_PAPER_WIDTH,
+        outer_margin=18,
+        inner_padding=18,
+        border_width=2,
+        corner_radius=8,
+        header_height=76,
+        badge_height=30,
+        badge_padding_x=14,
+        badge_radius=6,
+        section_gap=8,
+        text_gap=8,
+        rule_gap_above=8,
+        rule_gap_below=6,
+        footer_gap=8,
+        body_spacing=4,
+        subtext_spacing=4,
+        title_font_size=58,
+        badge_font_size=20,
+        body_font_size=28,
+        subtext_font_size=20,
+        frame_style="notebook",
+        line_style="light",
+        list_rows=14,
+        list_has_checkbox=True,
+        header_text_offset_y=-20,
+        body_start_offset_y=15,
+        meta_header_labels=("MONTH", "YEAR"),
+    ),
+}
+
+
 def get_theme(name: LabelThemeName | str) -> LabelTheme:
     if isinstance(name, str):
-        name = LabelThemeName(name)
-
-    base_paper = 640
-
-    if name == LabelThemeName.FRAMED_FOOD:
-        return LabelTheme(
-            paper_width_px=base_paper,
-            outer_margin=22,
-            inner_padding=22,
-            border_width=3,
-            corner_radius=22,
-            header_height=84,
-            badge_height=38,
-            badge_padding_x=18,
-            badge_radius=12,
-            section_gap=14,
-            text_gap=12,
-            rule_gap_above=12,
-            rule_gap_below=10,
-            footer_gap=10,
-            body_spacing=6,
-            subtext_spacing=4,
-            title_font_size=74,
-            badge_font_size=24,
-            body_font_size=36,
-            subtext_font_size=24,
-            background=255,
-            foreground=0,
-            threshold=180,
-            header_text_offset_y=-20,
-            body_start_offset_y=15,
-            content_shift_y=0,
-            debug_guides=False,
-            debug_color=(255, 0, 0),
-            frame_style="framed",
-        )
-    if name == LabelThemeName.MINIMAL:
-        return LabelTheme(
-            paper_width_px=base_paper,
-            outer_margin=12,
-            inner_padding=10,
-            border_width=0,
-            corner_radius=0,
-            header_height=48,
-            badge_height=28,
-            badge_padding_x=8,
-            badge_radius=4,
-            section_gap=8,
-            text_gap=8,
-            rule_gap_above=6,
-            rule_gap_below=4,
-            footer_gap=6,
-            body_spacing=4,
-            subtext_spacing=3,
-            title_font_size=42,
-            badge_font_size=18,
-            body_font_size=24,
-            subtext_font_size=16,
-            background=255,
-            foreground=0,
-            threshold=180,
-            header_text_offset_y=-20,
-            body_start_offset_y=15,
-            content_shift_y=0,
-            debug_guides=False,
-            debug_color=(255, 0, 0),
-            frame_style="minimal",
-        )
-    if name == LabelThemeName.BOLD:
-        return LabelTheme(
-            paper_width_px=base_paper,
-            outer_margin=28,
-            inner_padding=28,
-            border_width=6,
-            corner_radius=30,
-            header_height=100,
-            badge_height=48,
-            badge_padding_x=22,
-            badge_radius=16,
-            section_gap=18,
-            text_gap=16,
-            rule_gap_above=14,
-            rule_gap_below=12,
-            footer_gap=14,
-            body_spacing=8,
-            subtext_spacing=6,
-            title_font_size=84,
-            badge_font_size=28,
-            body_font_size=42,
-            subtext_font_size=26,
-            background=255,
-            foreground=0,
-            threshold=180,
-            header_text_offset_y=-20,
-            body_start_offset_y=15,
-            content_shift_y=0,
-            debug_guides=False,
-            debug_color=(255, 0, 0),
-            frame_style="bold",
-        )
-    if name == LabelThemeName.PLAYFUL:
-        return LabelTheme(
-            paper_width_px=base_paper,
-            outer_margin=20,
-            inner_padding=24,
-            border_width=4,
-            corner_radius=36,
-            header_height=88,
-            badge_height=44,
-            badge_padding_x=20,
-            badge_radius=20,
-            section_gap=16,
-            text_gap=14,
-            rule_gap_above=12,
-            rule_gap_below=10,
-            footer_gap=12,
-            body_spacing=7,
-            subtext_spacing=5,
-            title_font_size=66,
-            badge_font_size=26,
-            body_font_size=34,
-            subtext_font_size=22,
-            background=255,
-            foreground=0,
-            threshold=180,
-            header_text_offset_y=-20,
-            body_start_offset_y=15,
-            content_shift_y=0,
-            debug_guides=False,
-            debug_color=(255, 0, 0),
-            frame_style="playful",
-        )
-
-    if name == LabelThemeName.REMINDERS_NOTEBOOK:
-        return LabelTheme(
-            paper_width_px=base_paper,
-            outer_margin=18,
-            inner_padding=18,
-            border_width=2,
-            corner_radius=8,
-            header_height=76,
-            badge_height=30,
-            badge_padding_x=14,
-            badge_radius=6,
-            section_gap=8,
-            text_gap=8,
-            rule_gap_above=8,
-            rule_gap_below=6,
-            footer_gap=8,
-            body_spacing=4,
-            subtext_spacing=4,
-            title_font_size=58,
-            badge_font_size=20,
-            body_font_size=28,
-            subtext_font_size=20,
-            background=255,
-            foreground=0,
-            threshold=180,
-            frame_style="notebook",
-            line_style="light",
-            list_rows=14,
-            list_has_checkbox=True,
-            header_text_offset_y=-20,
-            body_start_offset_y=15,
-            content_shift_y=0,
-            debug_guides=False,
-            debug_color=(255, 0, 0),
-            meta_header_labels=("MONTH", "YEAR"),
-        )
+        try:
+            name = LabelThemeName(name)
+        except ValueError:
+            name = LabelThemeName.FRAMED_FOOD
+    builder = THEME_BUILDERS.get(name, THEME_BUILDERS[LabelThemeName.FRAMED_FOOD])
+    return builder()
 
 
 class FontSet:
@@ -344,6 +341,33 @@ def multiline_height(
     return bbox[3] - bbox[1]
 
 
+@dataclass
+class _StandardLayout:
+    width: int
+    total_h: int
+    left: int
+    top: int
+    right: int
+    bottom: int
+    inner_left: int
+    inner_right: int
+    header_bottom: int
+    title_font: ImageFont.ImageFont
+    badge_font: ImageFont.ImageFont
+    body_font: ImageFont.ImageFont
+    sub_font: ImageFont.ImageFont
+    body_lines: list[str]
+    sub_lines: list[str]
+    badge_text: str
+    badge_left: int
+    badge_top: int
+    badge_right: int
+    badge_bottom: int
+    cursor_y: int
+    rule_y: int
+    subtext_y: int
+
+
 class LabelBitmapRenderer:
     def __init__(self, theme: LabelTheme, fonts: FontSet):
         self.theme = theme
@@ -385,6 +409,24 @@ class LabelBitmapRenderer:
         return self.render_standard(data)
 
     def render_standard(self, data: LabelData) -> Image.Image:
+        layout = self._calculate_standard_layout(data)
+
+        mode = "RGB" if self.theme.debug_guides else "L"
+        bg = (255, 255, 255) if mode == "RGB" else self.theme.background
+        image = Image.new(mode, (layout.width, layout.total_h), color=bg)
+        draw = ImageDraw.Draw(image)
+
+        self._draw_standard_frame(draw, layout)
+        self._draw_standard_header(draw, data.verb, layout)
+        self._draw_standard_badge(draw, layout)
+        self._draw_standard_content(draw, layout)
+
+        if self.theme.debug_guides:
+            self._draw_standard_debug_guides(draw, layout)
+
+        return image
+
+    def _calculate_standard_layout(self, data: LabelData) -> _StandardLayout:
         width = self.theme.paper_width_px
         probe = Image.new("L", (width, 2400), color=self.theme.background)
         probe_draw = ImageDraw.Draw(probe)
@@ -445,121 +487,202 @@ class LabelBitmapRenderer:
             + self.theme.inner_padding
         )
 
-        mode = "RGB" if self.theme.debug_guides else "L"
-        bg = (255, 255, 255) if mode == "RGB" else self.theme.background
-        image = Image.new(mode, (width, total_h), color=bg)
-        draw = ImageDraw.Draw(image)
-
         bottom = total_h - self.theme.outer_margin - 1
+        header_bottom = top + self.theme.header_height
+        badge_left = inner_left
+        badge_top = header_bottom + self.theme.inner_padding
+        badge_right = badge_left + badge_w
+        badge_bottom = badge_top + badge_h
+
+        cursor_y = (
+            badge_bottom + self.theme.section_gap + self.theme.body_start_offset_y
+        )
+        body_bottom_y = cursor_y + body_h
+        rule_y = body_bottom_y + self.theme.rule_gap_above
+        subtext_y = rule_y + self.theme.rule_gap_below
+
+        return _StandardLayout(
+            width=width,
+            total_h=total_h,
+            left=left,
+            top=top,
+            right=right,
+            bottom=bottom,
+            inner_left=inner_left,
+            inner_right=inner_right,
+            header_bottom=header_bottom,
+            title_font=title_font,
+            badge_font=badge_font,
+            body_font=body_font,
+            sub_font=sub_font,
+            body_lines=body_lines,
+            sub_lines=sub_lines,
+            badge_text=badge_text,
+            badge_left=badge_left,
+            badge_top=badge_top,
+            badge_right=badge_right,
+            badge_bottom=badge_bottom,
+            cursor_y=cursor_y,
+            rule_y=rule_y,
+            subtext_y=subtext_y,
+        )
+
+    def _draw_standard_frame(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
         if self.theme.frame_style != "minimal":
             draw.rounded_rectangle(
-                [left, top, right, bottom],
+                [layout.left, layout.top, layout.right, layout.bottom],
                 radius=self.theme.corner_radius,
                 fill=self.theme.background,
                 outline=self.theme.foreground,
                 width=self.theme.border_width,
             )
         else:
-            draw.line((left, top, right, top), fill=self.theme.foreground, width=2)
             draw.line(
-                (left, bottom, right, bottom), fill=self.theme.foreground, width=2
+                (layout.left, layout.top, layout.right, layout.top),
+                fill=self.theme.foreground,
+                width=2,
+            )
+            draw.line(
+                (layout.left, layout.bottom, layout.right, layout.bottom),
+                fill=self.theme.foreground,
+                width=2,
             )
 
-        header_bottom = top + self.theme.header_height
+    def _draw_standard_header(
+        self, draw: ImageDraw.ImageDraw, verb: str, layout: _StandardLayout
+    ) -> None:
         draw.rounded_rectangle(
-            [left, top, right, header_bottom],
+            [layout.left, layout.top, layout.right, layout.header_bottom],
             radius=self.theme.corner_radius,
             fill=self.theme.foreground,
         )
         draw.rectangle(
-            [left, top + (self.theme.header_height // 2), right, header_bottom],
+            [
+                layout.left,
+                layout.top + (self.theme.header_height // 2),
+                layout.right,
+                layout.header_bottom,
+            ],
             fill=self.theme.foreground,
         )
 
-        header_center_x = (left + right) / 2
-        content_y = top + self.theme.content_shift_y
+        header_center_x = (layout.left + layout.right) / 2
+        content_y = layout.top + self.theme.content_shift_y
         header_center_y = (
-            content_y + (self.theme.header_height / 2) + self.theme.header_text_offset_y
+            content_y
+            + (self.theme.header_height / 2)
+            + self.theme.header_text_offset_y
         )
         draw.text(
             (header_center_x, header_center_y),
-            data.verb.upper(),
+            verb.upper(),
             fill=self.theme.background,
-            font=title_font,
+            font=layout.title_font,
             anchor="mm",
         )
 
-        badge_left = inner_left
-        badge_top = header_bottom + self.theme.inner_padding
-        badge_right = badge_left + badge_w
-        badge_bottom = badge_top + badge_h
+    def _draw_standard_badge(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
         draw.rounded_rectangle(
-            [badge_left, badge_top, badge_right, badge_bottom],
+            [
+                layout.badge_left,
+                layout.badge_top,
+                layout.badge_right,
+                layout.badge_bottom,
+            ],
             radius=self.theme.badge_radius,
             fill=self.theme.background,
             outline=self.theme.foreground,
             width=2,
         )
         draw.text(
-            ((badge_left + badge_right) / 2, (badge_top + badge_bottom) / 2),
-            badge_text,
+            (
+                (layout.badge_left + layout.badge_right) / 2,
+                (layout.badge_top + layout.badge_bottom) / 2,
+            ),
+            layout.badge_text,
             fill=self.theme.foreground,
-            font=badge_font,
+            font=layout.badge_font,
             anchor="mm",
         )
 
-        cursor_y = (
-            badge_bottom + self.theme.section_gap + self.theme.body_start_offset_y
-        )
+    def _draw_standard_content(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
         draw.multiline_text(
-            (inner_left, cursor_y),
-            "\n".join(body_lines),
+            (layout.inner_left, layout.cursor_y),
+            "\n".join(layout.body_lines),
             fill=self.theme.foreground,
-            font=body_font,
+            font=layout.body_font,
             spacing=self.theme.body_spacing,
         )
-        body_bottom_y = cursor_y + body_h
 
-        if sub_lines:
-            rule_y = body_bottom_y + self.theme.rule_gap_above
+        if layout.sub_lines:
             draw.line(
-                (inner_left, rule_y, inner_right, rule_y),
+                (
+                    layout.inner_left,
+                    layout.rule_y,
+                    layout.inner_right,
+                    layout.rule_y,
+                ),
                 fill=self.theme.foreground,
                 width=2,
             )
-            subtext_y = rule_y + self.theme.rule_gap_below
             draw.multiline_text(
-                (inner_left, subtext_y),
-                "\n".join(sub_lines),
+                (layout.inner_left, layout.subtext_y),
+                "\n".join(layout.sub_lines),
                 fill=self.theme.foreground,
-                font=sub_font,
+                font=layout.sub_font,
                 spacing=self.theme.subtext_spacing,
             )
 
-        if self.theme.debug_guides:
-            pad = self.theme.debug_margin_px
-            c = self.theme.debug_color
+    def _draw_standard_debug_guides(
+        self, draw: ImageDraw.ImageDraw, layout: _StandardLayout
+    ) -> None:
+        pad = self.theme.debug_margin_px
+        c = self.theme.debug_color
 
-            self.draw_debug_rect(draw, (left, top, right, bottom), color=c)
-            self.draw_debug_hline(draw, left, header_bottom, right, color=c, pad=pad)
-            self.draw_debug_rect(
-                draw, (badge_left, badge_top, badge_right, badge_bottom), color=c
-            )
+        self.draw_debug_rect(
+            draw, (layout.left, layout.top, layout.right, layout.bottom), color=c
+        )
+        self.draw_debug_hline(
+            draw, layout.left, layout.header_bottom, layout.right, color=c, pad=pad
+        )
+        self.draw_debug_rect(
+            draw,
+            (
+                layout.badge_left,
+                layout.badge_top,
+                layout.badge_right,
+                layout.badge_bottom,
+            ),
+            color=c,
+        )
+        self.draw_debug_hline(
+            draw,
+            layout.inner_left,
+            layout.cursor_y,
+            layout.inner_right,
+            color=c,
+            pad=pad,
+        )
+
+        if layout.sub_lines:
             self.draw_debug_hline(
-                draw, inner_left, cursor_y, inner_right, color=c, pad=pad
+                draw,
+                layout.inner_left,
+                layout.rule_y,
+                layout.inner_right,
+                color=c,
+                pad=pad,
             )
-
-            if sub_lines:
-                self.draw_debug_hline(
-                    draw, inner_left, rule_y, inner_right, color=c, pad=pad
-                )
-
-        return image
 
     def render_notebook(self, data: LabelData) -> Image.Image:
         width = self.theme.paper_width_px
         left = self.theme.outer_margin
-        top = self.theme.outer_margin
         right = width - self.theme.outer_margin - 1
 
         probe = Image.new("L", (width, 2400), color=self.theme.background)
@@ -567,7 +690,7 @@ class LabelBitmapRenderer:
 
         title_font = fit_font_size(
             probe_draw,
-            data.verb.upper(),
+            verb.upper(),
             self.fonts.title_path,
             right - left - 2 * self.theme.inner_padding,
             start=self.theme.title_font_size,
@@ -575,7 +698,7 @@ class LabelBitmapRenderer:
         )
         meta_font = self.fonts.body(20)
 
-        title_bbox = probe_draw.textbbox((0, 0), data.verb.upper(), font=title_font)
+        title_bbox = probe_draw.textbbox((0, 0), verb.upper(), font=title_font)
         title_h = title_bbox[3] - title_bbox[1]
 
         meta_h = 40 if self.theme.meta_header_labels else 0
@@ -593,6 +716,134 @@ class LabelBitmapRenderer:
             + (10 if header_h else 0)
             + list_h
             + self.theme.inner_padding
+        )
+        return title_font, meta_font, title_h, total_h, row_h
+
+    def _draw_notebook_meta_header(
+        self,
+        draw: ImageDraw.ImageDraw,
+        inner_left: int,
+        inner_right: int,
+        body_y: int,
+        meta_font: ImageFont.ImageFont,
+    ) -> int:
+        if not self.theme.meta_header_labels:
+            return body_y
+        mid_x = (inner_left + inner_right) // 2
+        draw.rectangle(
+            [inner_left, body_y, inner_right, body_y + 40],
+            outline=self.theme.foreground,
+            width=1,
+        )
+        draw.line(
+            (mid_x, body_y, mid_x, body_y + 40), fill=self.theme.foreground, width=1
+        )
+        draw.text(
+            (inner_left + 10, body_y + 6),
+            self.theme.meta_header_labels[0],
+            fill=self.theme.foreground,
+            font=meta_font,
+        )
+        draw.text(
+            (mid_x + 10, body_y + 6),
+            self.theme.meta_header_labels[1],
+            fill=self.theme.foreground,
+            font=meta_font,
+        )
+        return body_y + 48
+
+    def _draw_notebook_list_header(
+        self,
+        draw: ImageDraw.ImageDraw,
+        inner_left: int,
+        inner_right: int,
+        body_y: int,
+        meta_font: ImageFont.ImageFont,
+    ) -> int:
+        if not self.theme.list_has_checkbox:
+            return body_y
+        draw.text(
+            (inner_left + 28, body_y),
+            "ITEM",
+            fill=self.theme.foreground,
+            font=meta_font,
+        )
+        draw.line(
+            (inner_left, body_y + 24, inner_right, body_y + 24),
+            fill=self.theme.foreground,
+            width=1,
+        )
+        return body_y + 34
+
+    def _draw_notebook_rows(
+        self,
+        draw: ImageDraw.ImageDraw,
+        inner_left: int,
+        inner_right: int,
+        body_y: int,
+        row_h: int,
+    ) -> None:
+        for i in range(self.theme.list_rows or 12):
+            line_y = body_y + i * row_h
+            draw.line(
+                (inner_left, line_y, inner_right, line_y),
+                fill=self.theme.foreground,
+                width=1,
+            )
+            if self.theme.list_has_checkbox:
+                box_top = line_y + 8
+                draw.rectangle(
+                    [inner_left + 6, box_top, inner_left + 20, box_top + 14],
+                    outline=self.theme.foreground,
+                    width=1,
+                )
+
+    def _draw_notebook_debug_guides(
+        self,
+        draw: ImageDraw.ImageDraw,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        inner_left: int,
+        inner_right: int,
+        title_y: int,
+        body_y: int,
+        row_h: int,
+    ) -> None:
+        pad = self.theme.debug_margin_px
+        c = self.theme.debug_color
+
+        self.draw_debug_rect(draw, (left, top, right, bottom), color=c)
+        self.draw_debug_hline(draw, left, title_y, right, color=c, pad=pad)
+
+        if self.theme.meta_header_labels:
+            self.draw_debug_rect(
+                draw, (inner_left, body_y, inner_right, body_y + 40), color=c
+            )
+            self.draw_debug_hline(
+                draw, inner_left, body_y + 40, inner_right, color=c, pad=pad
+            )
+
+        if self.theme.list_has_checkbox:
+            self.draw_debug_hline(
+                draw, inner_left, body_y + 24, inner_right, color=c, pad=pad
+            )
+
+        for i in range(self.theme.list_rows or 12):
+            line_y = body_y + i * row_h
+            self.draw_debug_hline(
+                draw, inner_left, line_y, inner_right, color=c, pad=pad
+            )
+
+    def render_notebook(self, data: LabelData) -> Image.Image:
+        width = self.theme.paper_width_px
+        left = self.theme.outer_margin
+        top = self.theme.outer_margin
+        right = width - self.theme.outer_margin - 1
+
+        title_font, meta_font, title_h, total_h, row_h = (
+            self._calculate_notebook_dimensions(data.verb)
         )
 
         mode = "RGB" if self.theme.debug_guides else "L"
@@ -619,84 +870,26 @@ class LabelBitmapRenderer:
         )
 
         body_y = content_y + title_h + 12 + self.theme.body_start_offset_y
-
-        if self.theme.meta_header_labels:
-            mid_x = (inner_left + inner_right) // 2
-            draw.rectangle(
-                [inner_left, body_y, inner_right, body_y + 40],
-                outline=self.theme.foreground,
-                width=1,
-            )
-            draw.line(
-                (mid_x, body_y, mid_x, body_y + 40), fill=self.theme.foreground, width=1
-            )
-            draw.text(
-                (inner_left + 10, body_y + 6),
-                self.theme.meta_header_labels[0],
-                fill=self.theme.foreground,
-                font=meta_font,
-            )
-            draw.text(
-                (mid_x + 10, body_y + 6),
-                self.theme.meta_header_labels[1],
-                fill=self.theme.foreground,
-                font=meta_font,
-            )
-            body_y += 48
-
-        if self.theme.list_has_checkbox:
-            draw.text(
-                (inner_left + 28, body_y),
-                "ITEM",
-                fill=self.theme.foreground,
-                font=meta_font,
-            )
-            draw.line(
-                (inner_left, body_y + 24, inner_right, body_y + 24),
-                fill=self.theme.foreground,
-                width=1,
-            )
-            body_y += 34
-
-        for i in range(self.theme.list_rows or 12):
-            line_y = body_y + i * row_h
-            draw.line(
-                (inner_left, line_y, inner_right, line_y),
-                fill=self.theme.foreground,
-                width=1,
-            )
-            if self.theme.list_has_checkbox:
-                box_top = line_y + 8
-                draw.rectangle(
-                    [inner_left + 6, box_top, inner_left + 20, box_top + 14],
-                    outline=self.theme.foreground,
-                    width=1,
-                )
+        body_y = self._draw_notebook_meta_header(
+            draw, inner_left, inner_right, body_y, meta_font
+        )
+        body_y = self._draw_notebook_list_header(
+            draw, inner_left, inner_right, body_y, meta_font
+        )
+        self._draw_notebook_rows(draw, inner_left, inner_right, body_y, row_h)
 
         if self.theme.debug_guides:
-            pad = self.theme.debug_margin_px
-            c = self.theme.debug_color
-
-            self.draw_debug_rect(draw, (left, top, right, bottom), color=c)
-            self.draw_debug_hline(draw, left, title_y, right, color=c, pad=pad)
-
-            if self.theme.meta_header_labels:
-                self.draw_debug_rect(
-                    draw, (inner_left, body_y, inner_right, body_y + 40), color=c
-                )
-                self.draw_debug_hline(
-                    draw, inner_left, body_y + 40, inner_right, color=c, pad=pad
-                )
-
-            if self.theme.list_has_checkbox:
-                self.draw_debug_hline(
-                    draw, inner_left, body_y + 24, inner_right, color=c, pad=pad
-                )
-
-            for i in range(self.theme.list_rows or 12):
-                line_y = body_y + i * row_h
-                self.draw_debug_hline(
-                    draw, inner_left, line_y, inner_right, color=c, pad=pad
-                )
+            self._draw_notebook_debug_guides(
+                draw,
+                left,
+                top,
+                right,
+                bottom,
+                inner_left,
+                inner_right,
+                title_y,
+                body_y,
+                row_h,
+            )
 
         return image

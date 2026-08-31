@@ -6,7 +6,7 @@ from app.core.config import MealieConfig
 from app.sources.mealie import (
     MealieSource,
     MealieClient,
-    parse_ingredient_line,
+    map_mealie_recipe,
 )
 
 pytestmark = pytest.mark.anyio
@@ -107,28 +107,123 @@ async def test_mealie_source_fetch_error():
         assert "Network failed" in res["error"]
 
 
-@pytest.mark.parametrize(
-    "line, expected_quantity, expected_unit, expected_item, expected_note",
-    [
-        ("2 cups flour", "2", "cups", "flour", None),
-        ("1/2 tsp salt", "1/2", "tsp", "salt", None),
-        ("1 1/2 cups milk", "11/2", "cups", "milk", None),
-        ("1.5 kg sugar", "1.5", "kg", "sugar", None),
-        ("1-2 cloves garlic", "1-2", "cloves", "garlic", None),
-        ("Salt and black pepper", None, None, "Salt and black pepper", None),
-        ("cloves garlic", None, "cloves", "garlic", None),
-        ("1 cup flour (sifted)", "1", "cup", "flour", "sifted"),
-        ("1 cup flour (sifted) (organic)", "1", "cup", "flour", "sifted; organic"),
-        ("2 tbsp butter for frying", "2", "tbsp", "butter", "for frying"),
-        ("   3   tbsp   olive   oil   ", "3", "tbsp", "olive oil", None),
-        ("2 cups", "2", "cups", "2 cups", None),
-        ("", None, None, "", None),
-        ("   ", None, None, "", None),
-    ],
-)
-def test_parse_ingredient_line(line, expected_quantity, expected_unit, expected_item, expected_note):
-    res = parse_ingredient_line(line)
-    assert res.quantity == expected_quantity
-    assert res.unit == expected_unit
-    assert res.item == expected_item
-    assert res.note == expected_note
+def test_map_mealie_recipe_full_data():
+    raw_recipe = {
+        "id": "mealie-123",
+        "name": "Guacamole ",
+        "description": "Fresh avocado dip.",
+        "recipeServings": 4,
+        "prepTime": "10m",
+        "cookTime": "0m",
+        "totalTime": "10m",
+        "orgURL": "https://example.com/guacamole",
+        "slug": "guacamole",
+        "image": "http://example.com/guacamole.jpg",
+        "recipeYield": "2 cups",
+        "recipeYieldQuantity": 2,
+        "extras": {"rating": 5},
+        "recipeIngredient": [
+            {
+                "id": "ing-1",
+                "referenceId": "ref-1",
+                "display": "2 avocados",
+                "quantity": 2,
+                "food": {"name": "avocados"},
+                "unit": {"name": "whole"},
+                "note": "ripe",
+                "originalText": "2 ripe avocados",
+            },
+            {
+                "id": "ing-2",
+                "note": "1 tsp salt",
+            },
+        ],
+        "recipeInstructions": [
+            {"id": "step-1", "text": "Mash avocados."},
+            {"id": "step-2", "title": "Season with salt and lime."},
+        ],
+        "tags": [{"name": "Dip"}, {"name": "Mexican"}, {"name": None}],
+        "recipeCategory": [{"name": "Appetizer"}],
+    }
+
+    recipe_item = map_mealie_recipe(raw_recipe)
+
+    assert recipe_item.id == "mealie-123"
+    assert recipe_item.title == "Guacamole"
+    assert recipe_item.description == "Fresh avocado dip."
+    assert recipe_item.servings == 4
+    assert recipe_item.prep_time == "10m"
+    assert recipe_item.cook_time == "0m"
+    assert recipe_item.total_time == "10m"
+    assert recipe_item.source_url == "https://example.com/guacamole"
+
+    # Check ingredients
+    assert len(recipe_item.ingredients) == 2
+    ing1 = recipe_item.ingredients[0]
+    assert ing1.text == "2 avocados"
+    assert ing1.quantity == "2"
+    assert ing1.unit == "whole"
+    assert ing1.item == "avocados"
+    assert ing1.note == "ripe"
+    assert ing1.original_text == "2 ripe avocados"
+    assert ing1.metadata == {"mealie_id": "ing-1", "reference_id": "ref-1"}
+
+    ing2 = recipe_item.ingredients[1]
+    assert ing2.text == "1 tsp salt"
+    assert ing2.note == "1 tsp salt"
+
+    # Check steps
+    assert len(recipe_item.steps) == 2
+    assert recipe_item.steps[0].number == 1
+    assert recipe_item.steps[0].text == "Mash avocados."
+    assert recipe_item.steps[0].metadata == {"mealie_id": "step-1"}
+
+    assert recipe_item.steps[1].number == 2
+    assert recipe_item.steps[1].text == "Season with salt and lime."
+
+    # Check labels (categories + tags)
+    assert recipe_item.labels == ["Appetizer", "Dip", "Mexican"]
+
+    # Check metadata
+    assert recipe_item.metadata["slug"] == "guacamole"
+    assert recipe_item.metadata["image"] == "http://example.com/guacamole.jpg"
+    assert recipe_item.metadata["recipe_yield"] == "2 cups"
+    assert recipe_item.metadata["recipe_yield_quantity"] == 2
+    assert recipe_item.metadata["recipe_category"] == ["Appetizer"]
+    assert recipe_item.metadata["tags"] == ["Dip", "Mexican"]
+    assert recipe_item.metadata["extras"] == {"rating": 5}
+
+
+def test_map_mealie_recipe_defaults_and_edge_cases():
+    raw_recipe = {
+        "id": "mealie-empty",
+        "name": "   ",  # whitespace only -> fallback to Untitled Recipe
+        "recipeIngredient": [
+            {},  # empty ingredient dict -> filtered out
+            {"display": "   "},  # whitespace display -> filtered out
+            {"title": "1 cup flour"},  # valid title fallback
+        ],
+        "recipeInstructions": [
+            {},  # empty step dict -> filtered out
+            {"text": "   "},  # whitespace text -> filtered out
+            {"text": "Mix well."},  # valid step
+        ],
+        "tags": None,
+        "recipeCategory": None,
+    }
+
+    recipe_item = map_mealie_recipe(raw_recipe)
+
+    assert recipe_item.id == "mealie-empty"
+    assert recipe_item.title == "Untitled Recipe"
+    assert recipe_item.description is None
+    assert recipe_item.servings is None
+    assert recipe_item.ingredients[0].text == "1 cup flour"
+    assert len(recipe_item.ingredients) == 1
+    assert len(recipe_item.steps) == 1
+    assert recipe_item.steps[0].number == 1
+    assert recipe_item.steps[0].text == "Mix well."
+    assert recipe_item.labels == []
+    assert recipe_item.metadata["tags"] == []
+    assert recipe_item.metadata["recipe_category"] == []
+    assert recipe_item.metadata["extras"] == {}
