@@ -97,10 +97,11 @@ UNIT_ALIASES = {
 QTY_RE = re.compile(
     r"""^\s*
     (?P<quantity>
-        \d+(?:\s+\d/\d)? |
+        \d+\s+\d/\d |
         \d/\d |
-        \d+(?:\.\d+)? |
-        \d+\s*-\s*\d+
+        \d+\.\d+ |
+        \d+\s*-\s*\d+ |
+        \d+
     )
     \s*
     (?P<rest>.*)
