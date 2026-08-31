@@ -97,10 +97,11 @@ UNIT_ALIASES = {
 QTY_RE = re.compile(
     r"""^\s*
     (?P<quantity>
-        \d+(?:\s+\d/\d)? |
+        \d+\s+\d/\d |
         \d/\d |
-        \d+(?:\.\d+)? |
-        \d+\s*-\s*\d+
+        \d+\.\d+ |
+        \d+\s*-\s*\d+ |
+        \d+
     )
     \s*
     (?P<rest>.*)
@@ -273,21 +274,30 @@ def _map_step(raw: dict[str, Any], number: int) -> RecipeStep:
 def map_mealie_recipe(raw: dict[str, Any]) -> RecipeItem:
     ingredients = [
         _map_ingredient(item)
-        for item in raw.get("recipeIngredient", [])
+        for item in (raw.get("recipeIngredient") or [])
         if _extract_ingredient_text(item)
     ]
 
     steps = [
         _map_step(item, idx)
-        for idx, item in enumerate(raw.get("recipeInstructions", []), start=1)
-        if (item.get("text") or item.get("title"))
+        for idx, item in enumerate(
+            [
+                step for step in (raw.get("recipeInstructions") or [])
+                if (step.get("text") or step.get("title") or "").strip()
+            ],
+            start=1,
+        )
     ]
 
-    tags = [tag.get("name") for tag in raw.get("tags", []) if tag.get("name")]
+    tags = [
+        tag.get("name")
+        for tag in (raw.get("tags") or [])
+        if tag and tag.get("name")
+    ]
     categories = [
         category.get("name")
-        for category in raw.get("recipeCategory", [])
-        if category.get("name")
+        for category in (raw.get("recipeCategory") or [])
+        if category and category.get("name")
     ]
 
     labels = [*categories, *tags]
@@ -311,7 +321,7 @@ def map_mealie_recipe(raw: dict[str, Any]) -> RecipeItem:
             "recipe_yield_quantity": raw.get("recipeYieldQuantity"),
             "recipe_category": categories,
             "tags": tags,
-            "extras": raw.get("extras", {}),
+            "extras": raw.get("extras") or {},
         },
     )
 
