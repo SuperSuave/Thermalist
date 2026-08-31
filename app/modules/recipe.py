@@ -40,25 +40,20 @@ class RecipeModule(Module):
 
 RecipeVariant = Literal["cook-card", "ingredients-strip", "full-recipe"]
 
-def build_recipe_document(
+
+def _build_header_sections(
     recipe: RecipeItem,
     *,
-    variant: RecipeVariant = "cook-card",
-    include_description: bool = True,
-    include_times: bool = True,
-    include_labels: bool = False,
-    include_source_url: bool = False,
-    max_steps: int | None = None,
-    max_ingredients: int | None = None,
-) -> Document:
-    sections: list[DocumentSection] = []
-
-    sections.append(
+    include_times: bool,
+    include_description: bool,
+    include_labels: bool,
+) -> list[DocumentSection]:
+    sections: list[DocumentSection] = [
         DocumentSection(
             kind="title",
             text=recipe.title,
         )
-    )
+    ]
 
     time_summary = _build_time_summary(recipe) if include_times else None
     if time_summary:
@@ -85,83 +80,122 @@ def build_recipe_document(
             )
         )
 
-    ingredients = recipe.ingredients[:max_ingredients] if max_ingredients else recipe.ingredients
-    steps = recipe.steps[:max_steps] if max_steps else recipe.steps
+    return sections
 
-    if variant == "ingredients-strip":
-        if ingredients:
-            sections.append(DocumentSection(kind="divider"))
-            sections.append(
-                DocumentSection(
-                    kind="ingredient_list",
-                    ingredients=ingredients,
-                    metadata={"count": len(ingredients)},
-                )
-            )
 
-    elif variant == "full-recipe":
-        if ingredients:
-            sections.append(DocumentSection(kind="divider"))
-            sections.append(
-                DocumentSection(
-                    kind="text",
-                    text="INGREDIENTS",
-                )
-            )
-            sections.append(
-                DocumentSection(
-                    kind="ingredient_list",
-                    ingredients=ingredients,
-                    metadata={"count": len(ingredients)},
-                )
-            )
+def _build_ingredients_sections(
+    ingredients: list[Any],
+    *,
+    show_header: bool = False,
+) -> list[DocumentSection]:
+    if not ingredients:
+        return []
 
-        if steps:
-            sections.append(DocumentSection(kind="divider"))
-            sections.append(
-                DocumentSection(
-                    kind="text",
-                    text="STEPS",
-                )
-            )
-            sections.append(
-                DocumentSection(
-                    kind="step_list",
-                    steps=steps,
-                    metadata={"count": len(steps)},
-                )
-            )
-
-    else:  # cook-card
-        if ingredients:
-            sections.append(DocumentSection(kind="divider"))
-            sections.append(
-                DocumentSection(
-                    kind="ingredient_list",
-                    ingredients=ingredients,
-                    metadata={"count": len(ingredients)},
-                )
-            )
-
-        if steps:
-            sections.append(DocumentSection(kind="divider"))
-            sections.append(
-                DocumentSection(
-                    kind="step_list",
-                    steps=steps,
-                    metadata={"count": len(steps)},
-                )
-            )
-
-    if include_source_url and recipe.source_url:
-        sections.append(DocumentSection(kind="divider"))
+    sections: list[DocumentSection] = [DocumentSection(kind="divider")]
+    if show_header:
         sections.append(
+            DocumentSection(
+                kind="text",
+                text="INGREDIENTS",
+            )
+        )
+    sections.append(
+        DocumentSection(
+            kind="ingredient_list",
+            ingredients=ingredients,
+            metadata={"count": len(ingredients)},
+        )
+    )
+    return sections
+
+
+def _build_steps_sections(
+    steps: list[Any],
+    *,
+    show_header: bool = False,
+) -> list[DocumentSection]:
+    if not steps:
+        return []
+
+    sections: list[DocumentSection] = [DocumentSection(kind="divider")]
+    if show_header:
+        sections.append(
+            DocumentSection(
+                kind="text",
+                text="STEPS",
+            )
+        )
+    sections.append(
+        DocumentSection(
+            kind="step_list",
+            steps=steps,
+            metadata={"count": len(steps)},
+        )
+    )
+    return sections
+
+
+def _build_variant_sections(
+    variant: RecipeVariant,
+    ingredients: list[Any],
+    steps: list[Any],
+) -> list[DocumentSection]:
+    if variant == "ingredients-strip":
+        return _build_ingredients_sections(ingredients, show_header=False)
+    elif variant == "full-recipe":
+        return (
+            _build_ingredients_sections(ingredients, show_header=True)
+            + _build_steps_sections(steps, show_header=True)
+        )
+    else:  # cook-card
+        return (
+            _build_ingredients_sections(ingredients, show_header=False)
+            + _build_steps_sections(steps, show_header=False)
+        )
+
+
+def _build_footer_sections(
+    recipe: RecipeItem,
+    *,
+    include_source_url: bool,
+) -> list[DocumentSection]:
+    if include_source_url and recipe.source_url:
+        return [
+            DocumentSection(kind="divider"),
             DocumentSection(
                 kind="text",
                 text=recipe.source_url,
                 metadata={"role": "source_url"},
-            )
+            ),
+        ]
+    return []
+
+
+def build_recipe_document(
+    recipe: RecipeItem,
+    *,
+    variant: RecipeVariant = "cook-card",
+    include_description: bool = True,
+    include_times: bool = True,
+    include_labels: bool = False,
+    include_source_url: bool = False,
+    max_steps: int | None = None,
+    max_ingredients: int | None = None,
+) -> Document:
+    ingredients = recipe.ingredients[:max_ingredients] if max_ingredients else recipe.ingredients
+    steps = recipe.steps[:max_steps] if max_steps else recipe.steps
+
+    sections: list[DocumentSection] = []
+    sections.extend(
+        _build_header_sections(
+            recipe,
+            include_times=include_times,
+            include_description=include_description,
+            include_labels=include_labels,
         )
+    )
+    sections.extend(_build_variant_sections(variant, ingredients, steps))
+    sections.extend(_build_footer_sections(recipe, include_source_url=include_source_url))
 
     return Document(
         title=recipe.title,
