@@ -9,7 +9,7 @@ import httpx
 
 from app.core.models import RecipeItem
 from app.services.recipe_import import RecipeImportError, import_recipe_from_url
-from app.services.mealie_client import MealieClient
+from app.sources.mealie import MealieSource, MealieSourceConfig, MealieClient, fetch_mealie_recipe, MealieSourceOptions
 from app.core.config import Settings, get_settings
 
 router = APIRouter(prefix="/recipes", tags=["recipes"])
@@ -37,15 +37,15 @@ class MealieRecipeResponse(BaseModel):
     recipe: RecipeItem
 
 
-def get_mealie_client(
+def get_mealie_config(
     settings: Annotated[Settings, Depends(get_settings)],
-) -> MealieClient:
+) -> MealieSourceConfig:
     if not settings.mealie_base_url or not settings.mealie_api_key:
         raise HTTPException(status_code=503, detail="Mealie is not configured.")
 
-    return MealieClient(
+    return MealieSourceConfig(
         base_url=settings.mealie_base_url,
-        api_key=settings.mealie_api_key,
+        token=settings.mealie_api_key,
     )
 
 
@@ -62,17 +62,31 @@ async def import_recipe(body: ImportRecipeRequest) -> ImportRecipeResponse:
 
 @router.get("/mealie", response_model=MealieRecipeSummaryResponse)
 async def list_mealie_recipes(
-    mealie: Annotated[MealieClient, Depends(get_mealie_client)],
+    config: Annotated[MealieSourceConfig, Depends(get_mealie_config)],
     search: Annotated[str | None, Query(max_length=100)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
     per_page: Annotated[int, Query(ge=1, le=100)] = 50,
 ) -> MealieRecipeSummaryResponse:
     try:
-        recipes = await mealie.list_recipes(
-            search=search,
-            page=page,
-            per_page=per_page,
-        )
+        client = MealieClient(config)
+        try:
+            items = await client.search_recipes(
+                query_filter=search,
+                page=page,
+                per_page=per_page,
+            )
+        finally:
+            await client.aclose()
+
+        recipes = [
+            MealieRecipeSummary(
+                id=str(item.get("id") or item.get("slug") or ""),
+                slug=str(item.get("slug") or item.get("id") or ""),
+                name=str(item.get("name") or "Untitled Recipe"),
+            )
+            for item in items
+            if item.get("slug") or item.get("id")
+        ]
         return MealieRecipeSummaryResponse(recipes=recipes)
     except Exception as exc:
         raise HTTPException(
@@ -84,12 +98,18 @@ async def list_mealie_recipes(
 @router.get("/mealie/{slug_or_id}", response_model=MealieRecipeResponse)
 async def get_mealie_recipe(
     slug_or_id: str,
-    mealie: Annotated[MealieClient, Depends(get_mealie_client)],
+    config: Annotated[MealieSourceConfig, Depends(get_mealie_config)],
 ) -> MealieRecipeResponse:
     try:
-        recipe = await mealie.get_recipe(slug_or_id)
+        options = MealieSourceOptions(recipe_id=slug_or_id, slug=slug_or_id)
+        recipe = await fetch_mealie_recipe(config, options)
         return MealieRecipeResponse(recipe=recipe)
     except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Failed to load Mealie recipes: {exc}",
+        ) from exc
+    except Exception as exc:
         raise HTTPException(
             status_code=502,
             detail=f"Failed to load Mealie recipes: {exc}",

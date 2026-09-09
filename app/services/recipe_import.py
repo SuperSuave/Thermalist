@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from html.parser import HTMLParser
 import ipaddress
 import json
 import re
@@ -8,13 +9,39 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from bs4 import BeautifulSoup
 
 from app.core.models import RecipeIngredient, RecipeItem, RecipeStep
 
 
 class RecipeImportError(Exception):
     pass
+
+
+class _JSONLDParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.scripts: list[str] = []
+        self._in_script = False
+        self._current_script: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() == "script":
+            attr_dict = {k.lower(): v for k, v in attrs if v is not None}
+            if attr_dict.get("type", "").lower() == "application/ld+json":
+                self._in_script = True
+                self._current_script = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() == "script" and self._in_script:
+            script_text = "".join(self._current_script).strip()
+            if script_text:
+                self.scripts.append(script_text)
+            self._in_script = False
+            self._current_script = []
+
+    def handle_data(self, data: str) -> None:
+        if self._in_script:
+            self._current_script.append(data)
 
 
 async def import_recipe_from_url(url: str) -> RecipeItem:
@@ -82,8 +109,7 @@ def _validate_url(url: str) -> None:
             raise RecipeImportError("Could not resolve URL hostname")
 
         for family, type_, proto, canonname, sockaddr in addr_info:
-            ip_str = sockaddr[0]
-            ip = ipaddress.ip_address(ip_str)
+            ip = ipaddress.ip_address(sockaddr[0])
             _check_ip_allowed(ip)
     except socket.gaierror as exc:
         raise RecipeImportError(f"Failed to resolve URL hostname: {exc}") from exc
@@ -113,19 +139,13 @@ async def _fetch_html(url: str) -> str:
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/124.0.0.0 Safari/537.36"
         ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Cache-Control": "no-cache",
-        "Pragma": "no-cache",
-        "Referer": "https://www.google.com/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
     try:
         async with httpx.AsyncClient(follow_redirects=False, timeout=15.0, headers=headers) as client:
             current_url = url
-            max_redirects = 5
-
-            for _ in range(max_redirects):
+            for _ in range(5):
                 response = await client.get(current_url)
                 if response.is_redirect:
                     location = response.headers.get("location")
@@ -144,14 +164,10 @@ async def _fetch_html(url: str) -> str:
 
 
 def _extract_recipe_jsonld(html: str) -> dict[str, Any] | None:
-    soup = BeautifulSoup(html, "html.parser")
-    scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
+    parser = _JSONLDParser()
+    parser.feed(html)
 
-    for script in scripts:
-        raw = script.string or script.get_text(strip=True) or ""
-        if not raw:
-            continue
-
+    for raw in parser.scripts:
         for parsed in _parse_json_candidates(raw):
             recipe = _find_recipe_object(parsed)
             if recipe:
@@ -161,48 +177,25 @@ def _extract_recipe_jsonld(html: str) -> dict[str, Any] | None:
 
 
 def _parse_json_candidates(raw: str) -> list[Any]:
-    candidates: list[Any] = []
-
     try:
-        candidates.append(json.loads(raw))
-        return candidates
+        return [json.loads(raw)]
     except json.JSONDecodeError:
-        pass
-
-    cleaned = raw.strip()
-    cleaned = re.sub(r"<!--|-->", "", cleaned).strip()
-
-    try:
-        candidates.append(json.loads(cleaned))
-    except json.JSONDecodeError:
-        return []
-
-    return candidates
+        cleaned = re.sub(r"<!--|-->", "", raw).strip()
+        try:
+            return [json.loads(cleaned)]
+        except json.JSONDecodeError:
+            return []
 
 
 def _find_recipe_object(node: Any) -> dict[str, Any] | None:
     if isinstance(node, dict):
-        node_type = node.get("@type")
-        if _is_recipe_type(node_type):
+        if _is_recipe_type(node.get("@type")):
             return node
 
-        graph = node.get("@graph")
-        if isinstance(graph, list):
-            for item in graph:
-                found = _find_recipe_object(item)
-                if found:
-                    return found
-
-        main_entity = node.get("mainEntity")
-        if main_entity:
-            found = _find_recipe_object(main_entity)
-            if found:
-                return found
-
-        item_list = node.get("itemListElement")
-        if isinstance(item_list, list):
-            for item in item_list:
-                found = _find_recipe_object(item)
+        for key in ("@graph", "mainEntity", "itemListElement"):
+            val = node.get(key)
+            if val:
+                found = _find_recipe_object(val)
                 if found:
                     return found
 
@@ -231,20 +224,8 @@ def _normalize_ingredients(value: Any) -> list[RecipeIngredient]:
     ingredients: list[RecipeIngredient] = []
 
     for item in items:
-        if isinstance(item, str):
-            text = item.strip()
-            if text:
-                ingredients.append(
-                    RecipeIngredient(
-                        text=text,
-                        quantity=None,
-                        unit=None,
-                        item=None,
-                        note=None,
-                        original_text=text,
-                        metadata={},
-                    )
-                )
+        if isinstance(item, str) and item.strip():
+            ingredients.append(RecipeIngredient(text=item.strip(), original_text=item.strip()))
         elif isinstance(item, dict):
             text = _ingredient_text_from_dict(item)
             if text:
@@ -265,14 +246,10 @@ def _normalize_ingredients(value: Any) -> list[RecipeIngredient]:
 
 def _ingredient_text_from_dict(item: dict[str, Any]) -> str:
     if _as_text(item.get("text")):
-        return _as_text(item.get("text"))
+        return _as_text(item.get("text")) or ""
 
-    value = _as_text(item.get("value"))
-    unit = _as_text(item.get("unitText")) or _as_text(item.get("unitCode"))
-    name = _as_text(item.get("name"))
-
-    parts = [p for p in [value, unit, name] if p]
-    return " ".join(parts).strip()
+    parts = [_as_text(item.get("value")), _as_text(item.get("unitText")) or _as_text(item.get("unitCode")), _as_text(item.get("name"))]
+    return " ".join(p for p in parts if p).strip()
 
 
 def _normalize_instructions(value: Any) -> list[RecipeStep]:
@@ -280,61 +257,45 @@ def _normalize_instructions(value: Any) -> list[RecipeStep]:
         return []
 
     lines = _flatten_instruction_nodes(value)
-    steps: list[RecipeStep] = []
-
-    for idx, node in enumerate(lines, start=1):
-        text = node["text"].strip()
-        if text:
-            steps.append(
-                RecipeStep(
-                    number=idx,
-                    text=text,
-                    metadata=node.get("metadata", {}),
-                )
-            )
-
-    return steps
+    return [
+        RecipeStep(number=idx, text=node["text"].strip(), metadata=node.get("metadata", {}))
+        for idx, node in enumerate(lines, start=1)
+        if node["text"].strip()
+    ]
 
 
 def _flatten_instruction_nodes(value: Any) -> list[dict[str, Any]]:
     if isinstance(value, str):
-        parts = [part.strip() for part in value.splitlines()]
-        return [{"text": part, "metadata": {}} for part in parts if part]
+        return [{"text": p.strip(), "metadata": {}} for p in value.splitlines() if p.strip()]
 
     if isinstance(value, list):
-        output: list[dict[str, Any]] = []
+        out = []
         for item in value:
-            output.extend(_flatten_instruction_nodes(item))
-        return output
+            out.extend(_flatten_instruction_nodes(item))
+        return out
 
     if isinstance(value, dict):
         node_type = value.get("@type")
-
         if node_type == "HowToStep":
             text = _as_text(value.get("text")) or _as_text(value.get("name"))
             return [{"text": text, "metadata": {"source": value}}] if text else []
 
         if node_type == "HowToSection":
-            output: list[dict[str, Any]] = []
+            out = []
             section_name = _as_text(value.get("name"))
             if section_name:
-                output.append(
-                    {"text": section_name, "metadata": {"section_heading": True, "source": value}}
-                )
-
+                out.append({"text": section_name, "metadata": {"section_heading": True, "source": value}})
             steps = value.get("itemListElement") or value.get("steps")
-            output.extend(_flatten_instruction_nodes(steps))
-            return output
+            out.extend(_flatten_instruction_nodes(steps))
+            return out
 
         if "text" in value or "name" in value:
             text = _as_text(value.get("text")) or _as_text(value.get("name"))
             return [{"text": text, "metadata": {"source": value}}] if text else []
 
-        if "itemListElement" in value:
-            return _flatten_instruction_nodes(value.get("itemListElement"))
-
-        if "steps" in value:
-            return _flatten_instruction_nodes(value.get("steps"))
+        for k in ("itemListElement", "steps"):
+            if k in value:
+                return _flatten_instruction_nodes(value.get(k))
 
     return []
 
@@ -343,7 +304,6 @@ def _normalize_servings(value: Any) -> int | None:
     text = _as_text(value)
     if not text:
         return None
-
     match = re.search(r"\d+", text)
     return int(match.group()) if match else None
 
@@ -365,9 +325,9 @@ def _normalize_duration(value: Any) -> str | None:
     minutes = int(iso_match.group("minutes") or 0)
     seconds = int(iso_match.group("seconds") or 0)
 
-    parts: list[str] = []
+    parts = []
     if hours:
-        parts.append(f"{hours} hr" if hours == 1 else f"{hours} hr")
+        parts.append(f"{hours} hr")
     if minutes:
         parts.append(f"{minutes} min")
     if seconds and not parts:
@@ -379,24 +339,17 @@ def _normalize_duration(value: Any) -> str | None:
 def _as_text(value: Any) -> str | None:
     if value is None:
         return None
-
-    if isinstance(value, str):
-        value = value.strip()
-        return value or None
-
-    if isinstance(value, (int, float)):
-        return str(value)
-
+    if isinstance(value, (str, int, float)):
+        s = str(value).strip()
+        return s or None
     if isinstance(value, list):
         parts = [_as_text(v) for v in value]
         parts = [p for p in parts if p]
         return ", ".join(parts) if parts else None
-
     if isinstance(value, dict):
         for key in ("name", "text", "@value"):
             if key in value:
                 return _as_text(value.get(key))
-
     return None
 
 
@@ -404,9 +357,7 @@ def _fallback_title_from_url(url: str) -> str:
     path = urlparse(url).path.strip("/")
     if not path:
         return "Imported Recipe"
-
-    slug = path.split("/")[-1]
-    slug = slug.replace("-", " ").replace("_", " ").strip()
+    slug = path.split("/")[-1].replace("-", " ").replace("_", " ").strip()
     return slug.title() if slug else "Imported Recipe"
 
 

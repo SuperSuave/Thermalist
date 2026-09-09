@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import socket
 
 from PIL import Image
-
-try:
-    from escpos.printer import Network
-except Exception:
-    Network = None
 
 from app.renderers.label_bitmap import (
     FontSet,
@@ -52,20 +48,27 @@ def save_label_preview(
 def print_label_network(
     image: Image.Image, host: str, port: int = 9100, center: bool = False
 ) -> dict:
-    if Network is None:
-        raise RuntimeError("python-escpos is not installed. Cannot print.")
+    bw = prepare_for_print(image)
+    width, height = bw.size
 
-    printer = Network(host=host, port=port)
-    printer.image(
-        image,
-        high_density_vertical=True,
-        high_density_horizontal=True,
-        impl="bitImageRaster",
-        fragment_height=960,
-        center=center,
-    )
-    printer.cut()
-    printer.close()
+    width_bytes = (width + 7) // 8
+    header = b"\x1d\x76\x30\x00" + width_bytes.to_bytes(2, "little") + height.to_bytes(2, "little")
+
+    raster_data = bytearray()
+    for y in range(height):
+        row = bytearray(width_bytes)
+        for x in range(width):
+            pixel = bw.getpixel((x, y))
+            if pixel == 0:
+                byte_idx = x // 8
+                bit_idx = 7 - (x % 8)
+                row[byte_idx] |= (1 << bit_idx)
+        raster_data.extend(row)
+
+    payload = b"\x1b\x40" + header + bytes(raster_data) + b"\x1d\x56\x00"
+
+    with socket.create_connection((host, port), timeout=10) as sock:
+        sock.sendall(payload)
 
     return {
         "status": "printed",
@@ -99,3 +102,7 @@ class LabelBitmapService:
     def render_and_save(self, data: LabelData, label_name: str) -> dict:
         image = self.render_label(data)
         return save_label_preview(image, label_name, self.theme.threshold)
+
+    def render_and_print(self, data: LabelData | dict, host: str, port: int = 9100) -> dict:
+        image = self.render_label(data)
+        return print_label_network(image, host=host, port=port)
