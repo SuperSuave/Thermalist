@@ -5,8 +5,6 @@ from typing import Any
 
 from app.core.models import Document, DocumentSection
 from app.modules.base import Module
-from app.modules.utils import compact_metadata
-
 
 TAG_RE = re.compile(r"<[^>]+>")
 
@@ -38,16 +36,20 @@ class NotesModule(Module):
             or payload.get("text")
         ) or ""
 
+        meta = {
+            k: v
+            for k, v in {
+                "source": payload.get("source"),
+                "module": self.name,
+            }.items()
+            if v is not None
+        }
+
         return Document(
             title=title,
             sections=[
                 DocumentSection(kind="title", text=title),
                 DocumentSection(kind="text", text=body),
             ],
-            metadata=compact_metadata(
-                {
-                    "source": payload.get("source"),
-                    "module": self.name,
-                }
-            ),
+            metadata=meta,
         )

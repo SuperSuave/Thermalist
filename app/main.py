@@ -7,7 +7,6 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes.health import router as health_router
 from app.api.routes.labels import router as labels_router
-from app.api.routes.theme_designer import router as theme_designer_router
 from app.api.routes.preview import router as preview_router
 from app.api.routes.printing import router as printing_router
 from app.api.routes.donetick_labels import router as donetick_labels
@@ -58,4 +57,3 @@ app.include_router(labels_router, prefix="/api", tags=["labels"])
 app.include_router(preview_router)
 app.include_router(printing_router)
 app.include_router(recipes_router)
-app.include_router(theme_designer_router)

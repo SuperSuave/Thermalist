@@ -4,7 +4,7 @@ from typing import Any
 
 from app.core.models import Document, DocumentSection
 from app.modules.base import Module
-from app.modules.utils import compact_metadata
+
 
 class LabelModule(Module):
     name = "label"
@@ -18,19 +18,23 @@ class LabelModule(Module):
         if not verb:
             raise ValueError("Label payload is missing 'verb'")
 
+        meta = {
+            k: v
+            for k, v in {
+                "date": date,
+                "note": note,
+                "theme_name": theme_name,
+            }.items()
+            if v is not None
+        }
+
         return Document(
             title=verb,
             sections=[
                 DocumentSection(
                     kind="label",
                     text=verb,
-                    metadata=compact_metadata(
-                        {
-                            "date": date,
-                            "note": note,
-                            "theme_name": theme_name,
-                        }
-                    ),
+                    metadata=meta,
                 )
             ],
             metadata={
