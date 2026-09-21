@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" width="640" height="360">
+  <rect width="640" height="360" fill="#ffffff" />
+  <rect x="22" y="22" width="596" height="316" rx="20" fill="none" stroke="#000000" stroke-width="3.5" />
+  
+  <!-- Header: pill verb + date -->
+  <rect x="42" y="44" width="160" height="46" rx="14" fill="#000000" />
+  <text x="122" y="76" fill="#ffffff" font-family="system-ui, -apple-system, sans-serif" font-size="24" font-weight="800" text-anchor="middle" letter-spacing="2">EXPIRES</text>
+  <text x="594" y="78" fill="#000000" font-family="system-ui, -apple-system, sans-serif" font-size="34" font-weight="800" text-anchor="end">09/15/26</text>
+  
+  <line x1="42" y1="110" x2="598" y2="110" stroke="#000000" stroke-width="2.5" />
+  
+  <!-- Note Content -->
+  <text x="44" y="185" fill="#000000" font-family="system-ui, -apple-system, sans-serif" font-size="44" font-weight="700">Homemade Kimchi</text>
+</svg>

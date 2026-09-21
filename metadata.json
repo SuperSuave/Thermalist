@@ -1,0 +1,8 @@
+{
+  "name": "ThermaList",
+  "description": "Thermal receipt and label printing web application for notes, todo lists, labels, and recipes",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

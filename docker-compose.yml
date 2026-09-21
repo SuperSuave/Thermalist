@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  thermalist:
+    build: .
+    container_name: thermalist
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - RAW_TCP_HOST=192.168.1.150
+      - RAW_TCP_PORT=9100
+      - MCP_AUTH_TOKEN=thermalist-secure-token
+    # Uncomment if you want to mount persistent generated images or config
+    # volumes:
+    #   - ./generated_images:/app/generated_images
